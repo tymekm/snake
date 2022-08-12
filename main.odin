@@ -152,13 +152,33 @@ moveSnake :: proc(game : ^Game, dirct : Direction) {
     nextPos :[2]i32
     #partial switch dirct {
         case .Up :
-            nextPos = {snake.body[0].x, snake.body[0].y - 1}
+            if snake.body[0].y == 0 {
+                nextPos = {snake.body[0].x, CELL_ROWS - 1}
+
+            } else {
+                nextPos = {snake.body[0].x, snake.body[0].y - 1}
+            }
         case .Down :
-            nextPos = {snake.body[0].x, snake.body[0].y + 1}
+            if snake.body[0].y == CELL_ROWS - 1 {
+                nextPos = {snake.body[0].x, 0}
+
+            } else {
+                nextPos = {snake.body[0].x, snake.body[0].y + 1}
+            }
         case .Left :
-            nextPos = {snake.body[0].x - 1, snake.body[0].y}
+            if snake.body[0].x == 0 {
+                nextPos = {CELL_COLUMNS - 1, snake.body[0].y}
+            }
+            else {
+                nextPos = {snake.body[0].x - 1, snake.body[0].y}
+            }
         case .Right :
-            nextPos = {snake.body[0].x + 1, snake.body[0].y}
+            if snake.body[0].x == CELL_COLUMNS - 1{
+                nextPos = {0, snake.body[0].y}
+            }
+            else {
+                nextPos = {snake.body[0].x + 1, snake.body[0].y}
+            }
     }
     if nextPos != snake.body[1] {
         checkCollision(nextPos, game)
