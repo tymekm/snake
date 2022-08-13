@@ -23,7 +23,6 @@ Game :: struct {
     gridPos: [2]i32,
     gridSize: [2]i32,
     snake : Snake,
-    speed : f32,
     frameTimeAcc : f32,
     state : State,
 }
@@ -32,6 +31,12 @@ Snake :: struct {
     body : [dynamic][2]i32,
     direction : Direction,
     nextPos : [2]i32,
+}
+
+Entity :: struct {
+    pos: [2]i32,
+    val: i32,
+    color: rl.Color,
 }
 
 Colors := map[string]u32{
@@ -81,7 +86,6 @@ gameInit :: proc() -> Game {
     gridPos.y = (W_HEIGHT  - gridSize.y) / 2
     drawField(&game)
 
-    speed = GAME_SPEED
     frameTimeAcc = 0
     state = State.Running
 
@@ -126,7 +130,7 @@ drawField :: proc(game : ^Game) {
     }
 
     rl.DrawRectangleLinesEx(
-        outerRec, 3,
+        outerRec, 2,
         inLineC,
     )
 
@@ -197,11 +201,11 @@ moveSnake :: proc(game : ^Game, dirct : Direction) {
 
 checkCollision :: proc(nextPos: [2]i32, game: ^Game) {
     using game
-   for occupied in snake.body {
-       if nextPos == occupied{
+    for occupied in snake.body {
+        if nextPos == occupied{
             state = State.Death
-       } 
-   } 
+        } 
+    } 
 }
 
 drawSnake :: proc(game: ^Game) {
