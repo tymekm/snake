@@ -217,6 +217,40 @@ drawSnake :: proc(game: ^Game) {
     }
 }
 
+handleInput :: proc(game: ^Game) {
+
+        if game.state == State.Death {
+            if rl.IsKeyPressed(.ENTER){
+                game^ = gameInit()
+            } return
+        }else if game.state == State.Paused {
+            if rl.IsKeyPressed(.P){
+                game.state = State.Running
+            } return
+        }
+        if rl.IsKeyDown(.ESCAPE) || rl.IsKeyDown(.Q){
+            game.state = State.Quit
+        }
+        if rl.IsKeyDown(.UP) || rl.IsKeyDown(.E){
+            moveSnake(game, Direction.Up)
+        }
+        if rl.IsKeyDown(.DOWN) || rl.IsKeyDown(.D){
+            moveSnake(game, Direction.Down)
+        }
+        if rl.IsKeyDown(.RIGHT) || rl.IsKeyDown(.F){
+            moveSnake(game, Direction.Right)
+        }
+        if rl.IsKeyDown(.LEFT) || rl.IsKeyDown(.S){
+            moveSnake(game, Direction.Left)
+        }
+        if rl.IsKeyPressed(.P){
+            game.state = State.Paused
+        }
+        else {
+            moveSnake(game, game.snake.direction)
+        }
+}
+
 main :: proc() {
     rl.InitWindow(W_WIDTH, W_HEIGHT, "Snake!")
     defer rl.CloseWindow()
@@ -228,43 +262,10 @@ main :: proc() {
     for game.state != .Quit {
         rl.BeginDrawing()
         defer rl.EndDrawing()
-
-        if game.state == State.Death {
-            if rl.IsKeyPressed(.ENTER){
-                game = gameInit()
-            }
-            continue
-        }else if game.state == State.Paused {
-            if rl.IsKeyPressed(.P){
-                game.state = State.Running
-            }
-            continue
-        }
-        if rl.IsKeyDown(.ESCAPE) || rl.IsKeyDown(.Q){
-            game.state = State.Quit
-        }
-        if rl.IsKeyDown(.UP) || rl.IsKeyDown(.E){
-            moveSnake(&game, Direction.Up)
-        }
-        if rl.IsKeyDown(.DOWN) || rl.IsKeyDown(.D){
-            moveSnake(&game, Direction.Down)
-        }
-        if rl.IsKeyDown(.RIGHT) || rl.IsKeyDown(.F){
-            moveSnake(&game, Direction.Right)
-        }
-        if rl.IsKeyDown(.LEFT) || rl.IsKeyDown(.S){
-            moveSnake(&game, Direction.Left)
-        }
-        if rl.IsKeyPressed(.P){
-            game.state = State.Paused
-        }
-        else {
-            moveSnake(&game, game.snake.direction)
-        }
-
+        handleInput(&game)
+        if game.state != .Running {continue}
         drawField(&game)
         drawSnake(&game)
-        /* rl.DrawFPS(10,10) */
         game.frameTimeAcc += rl.GetFrameTime()
     }
 }
