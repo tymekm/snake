@@ -1,5 +1,6 @@
 package main
 import rand "core:math/rand"
+import "core:time"
 import "core:fmt"
 import rl "vendor:raylib"
 import la "core:math/linalg"
@@ -13,7 +14,7 @@ CELLS :: CELL_COLUMNS * CELL_ROWS
 
 Direction :: enum{Up, Left, Down, Right}
 State :: enum {Running, Paused, Death, Quit}
-Fruit :: enum { Apple, Pear, Orange}
+Fruit :: enum { Apple, Grape, Lemon}
 
 
 Game :: struct {
@@ -22,7 +23,9 @@ Game :: struct {
     gridPos: [2]i32,
     gridSize: [2]i32,
     snake : Snake,
+    food: [dynamic]Food,
     frameTimeAcc : f32,
+    movesAcc: i32,
     state : State,
 }
 
@@ -63,16 +66,27 @@ Rgb :: struct {
     a : u8,
 }
 
-getColor :: proc(color: u32, alpha:u8= 255) -> rl.Color{
-    rgb : rl.Color
-    rgb.r = u8(color >> (2*8) & 0xFF)
-    rgb.g = u8(color >> (1*8) & 0xFF)
-    rgb.b = u8(color >> (0*8) & 0xFF)
-    rgb.a = alpha
-    return rgb
+main :: proc() {
+    rl.InitWindow(W_WIDTH, W_HEIGHT, "Snake!")
+    defer rl.CloseWindow()
+
+    rl.SetTargetFPS(FPS)
+
+    game := initGame()
+
+    for game.state != .Quit {
+        rl.BeginDrawing()
+        defer rl.EndDrawing()
+        handleInput(&game)
+        getFood(&game)
+        drawField(&game)
+        drawSnake(&game)
+        if game.state != .Running {continue}
+        game.frameTimeAcc += rl.GetFrameTime()
+    }
 }
 
-gameInit :: proc() -> Game {
+initGame :: proc() -> Game {
     game := Game{}
     using game
 
@@ -85,6 +99,7 @@ gameInit :: proc() -> Game {
     drawField(&game)
 
     frameTimeAcc = 0
+    movesAcc = 0
     state = State.Running
 
     startPos: [2]i32 = {CELL_COLUMNS / 2 , CELL_ROWS / 2}
@@ -94,54 +109,6 @@ gameInit :: proc() -> Game {
     }
     snake.direction = Direction.Right
     return game
-}
-
-getPixlPos :: proc(vec: [2]i32, game: ^Game) -> [2]i32 {
-    using game
-    pos : [2]i32 
-    pos.x = gridPos.x + vec.x * cellSize.x
-    pos.y = gridPos.y + vec.y * cellSize.y
-    return pos
-}
-
-createGrid :: proc(game : ^Game){
-    using game
-    i := 0
-    for x in 0..<CELL_COLUMNS{
-        for y in 0..<CELL_ROWS{
-            vec :[2]i32= {i32(x),i32(y)}
-            cells[i] = getPixlPos(vec, game)
-            i+=1
-        }
-    }
-}
-
-drawField :: proc(game : ^Game) {
-    using game
-    rl.ClearBackground(getColor(Colors["black"]))
-    outLineC := getColor(Colors["brightBlack"], 50)
-    inLineC := getColor(Colors["brightRed"], 255)
-    outerRec := rl.Rectangle {
-        f32(gridPos.x), f32(gridPos.y),
-        f32(gridSize.x), f32(gridSize.y),
-    }
-    rl.DrawRectangleLinesEx( outerRec, 2, inLineC)
-
-    for i in 1..<CELL_COLUMNS {
-       rl.DrawLine(
-           gridPos.x + i32(i) * cellSize.x, gridPos.y,
-           gridPos.x + i32(i) * cellSize.x, gridPos.y + gridSize.y,
-           outLineC,
-       ) 
-    }
-
-    for i in 1..<CELL_ROWS {
-       rl.DrawLine(
-           gridPos.x, gridPos.y + i32(i) * cellSize.y,
-           gridPos.x + gridSize.x, gridPos.y + i32(i) * cellSize.y,
-           outLineC,
-       ) 
-    }
 }
 
 moveSnake :: proc(game : ^Game, dirct : Direction) {
@@ -192,32 +159,18 @@ moveSnake :: proc(game : ^Game, dirct : Direction) {
     }
 }
 
-checkCollision :: proc(nextPos: [2]i32, game: ^Game) {
-    using game
+checkCollision :: proc(nextPos: [2]i32, using game: ^Game) {
     for occupied in snake.body {
-        if nextPos == occupied{
+        if nextPos == occupied {
             state = .Death
         } 
     } 
 }
 
-drawSnake :: proc(game: ^Game) {
-    using game
-    color := getColor(Colors["brightRed"], 150)
-    if state == .Death {
-        color = getColor(Colors["red"], 150)
-    }
-    for xy in snake.body {
-        pos := getPixlPos(xy, game) 
-        rl.DrawRectangle(pos.x, pos.y, cellSize.x, cellSize.y, color,)
-    }
-}
-
-handleInput :: proc(game: ^Game) {
-        using game
+handleInput :: proc(using game: ^Game) {
         if state == .Death {
             if rl.IsKeyPressed(.ENTER){
-                game^ = gameInit()
+                game^ = initGame()
             }
             if rl.IsKeyPressed(.Q){
                 state = .Quit
@@ -251,21 +204,72 @@ handleInput :: proc(game: ^Game) {
         }
 }
 
-main :: proc() {
-    rl.InitWindow(W_WIDTH, W_HEIGHT, "Snake!")
-    defer rl.CloseWindow()
+getFood :: proc(using game: ^Game) -> [2]i32 {
+    rng := rand.create(u64(time.to_unix_nanoseconds(time.now())))
+    pos :[2]i32= {
+        i32(rand.float32_range(0, CELL_COLUMNS - 1, &rng)),
+        i32(rand.float32_range(0, CELL_ROWS - 1, &rng)),
+    }
+    /* for  */
+    /* if pos in snake.body { */
+    /*     fmt.println("we Hit!") */
+    /* } */
+    /* else { */
+    /*     fmt.println("we clear!") */
+    /* } */
+    return pos
+}
 
-    rl.SetTargetFPS(FPS)
+getColor :: proc(color: u32, alpha:u8= 255) -> rl.Color{
+    rgb : rl.Color
+    rgb.r = u8(color >> (2*8) & 0xFF)
+    rgb.g = u8(color >> (1*8) & 0xFF)
+    rgb.b = u8(color >> (0*8) & 0xFF)
+    rgb.a = alpha
+    return rgb
+}
 
-    game := gameInit()
+getPixlPos :: proc(vec: [2]i32, using game: ^Game) -> [2]i32 {
+    pos : [2]i32 
+    pos.x = gridPos.x + vec.x * cellSize.x
+    pos.y = gridPos.y + vec.y * cellSize.y
+    return pos
+}
 
-    for game.state != .Quit {
-        rl.BeginDrawing()
-        defer rl.EndDrawing()
-        handleInput(&game)
-        drawField(&game)
-        drawSnake(&game)
-        if game.state != .Running {continue}
-        game.frameTimeAcc += rl.GetFrameTime()
+drawField :: proc(using game : ^Game) {
+    rl.ClearBackground(getColor(Colors["black"]))
+    outLineC := getColor(Colors["brightBlack"], 50)
+    inLineC := getColor(Colors["brightRed"], 255)
+    outerRec := rl.Rectangle {
+        f32(gridPos.x), f32(gridPos.y),
+        f32(gridSize.x), f32(gridSize.y),
+    }
+    rl.DrawRectangleLinesEx( outerRec, 2, inLineC)
+
+    for i in 1..<CELL_COLUMNS {
+       rl.DrawLine(
+           gridPos.x + i32(i) * cellSize.x, gridPos.y,
+           gridPos.x + i32(i) * cellSize.x, gridPos.y + gridSize.y,
+           outLineC,
+       ) 
+    }
+
+    for i in 1..<CELL_ROWS {
+       rl.DrawLine(
+           gridPos.x, gridPos.y + i32(i) * cellSize.y,
+           gridPos.x + gridSize.x, gridPos.y + i32(i) * cellSize.y,
+           outLineC,
+       ) 
+    }
+}
+
+drawSnake :: proc(using game: ^Game) {
+    color := getColor(Colors["brightRed"], 150)
+    if state == .Death {
+        color = getColor(Colors["red"], 150)
+    }
+    for xy in snake.body {
+        pos := getPixlPos(xy, game) 
+        rl.DrawRectangle(pos.x, pos.y, cellSize.x, cellSize.y, color,)
     }
 }
