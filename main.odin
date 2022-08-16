@@ -14,7 +14,7 @@ CELLS :: CELL_COLUMNS * CELL_ROWS
 
 Direction :: enum{Up, Left, Down, Right}
 State :: enum {Running, Paused, Death, Quit}
-Fruit :: enum { Apple, Grape, Lemon}
+Foods :: enum {Apple, Grape, Lemon}
 
 
 Game :: struct {
@@ -37,7 +37,7 @@ Snake :: struct {
 
 Food :: struct {
     pos: [2]i32,
-    type: Fruit,
+    type: Foods,
 }
 
 Colors := map[string]u32{
@@ -78,9 +78,7 @@ main :: proc() {
         rl.BeginDrawing()
         defer rl.EndDrawing()
         handleInput(&game)
-        getFood(&game)
-        drawField(&game)
-        drawSnake(&game)
+        draw(&game)
         if game.state != .Running {continue}
         game.frameTimeAcc += rl.GetFrameTime()
     }
@@ -89,25 +87,28 @@ main :: proc() {
 initGame :: proc() -> Game {
     game := Game{}
     using game
+    state = State.Running
 
+    /* Init Grid */
     size := la.round(W_WIDTH * 0.8 / CELL_COLUMNS)
     cellSize.xy = i32(size)
     gridSize.x = cellSize.x * CELL_COLUMNS
     gridSize.y = cellSize.y * CELL_ROWS
     gridPos.x = (W_WIDTH  - gridSize.x) / 2
     gridPos.y = (W_HEIGHT  - gridSize.y) / 2
-    drawField(&game)
-
-    frameTimeAcc = 0
-    movesAcc = 0
-    state = State.Running
-
+    f :Food= {
+        getFood(&game),
+        Foods.Apple,
+    }; append(&food, f)
+    
+    /* Init Snake */
     startPos: [2]i32 = {CELL_COLUMNS / 2 , CELL_ROWS / 2}
     for i in 0..<8 {
         vec : [2]i32 = {startPos.x - i32(i), startPos.y}
         append(&snake.body, vec)
     }
     snake.direction = Direction.Right
+
     return game
 }
 
@@ -143,28 +144,32 @@ moveSnake :: proc(game : ^Game, dirct : Direction) {
             }
     }
 
-    if nPos == body[1] {return}
+    if nPos == body[1] do return
 
-    checkCollision(nPos, game)
+    if checkCollision(nPos, game) {
+        game.state = .Death 
+        return
+    } 
+
     nextPos =  nPos
     direction = dirct
 
     if game.frameTimeAcc >= GAME_SPEED {
-        it := len(body) - 1
-        for i := it; i > 0; i-=1 {
+        len := len(body) - 1
+        for i := len; i > 0; i-=1 {
             body[i] = body[i-1]
         }
         body[0] = nPos
         game.frameTimeAcc -= GAME_SPEED
+        game.movesAcc += 1
     }
 }
 
-checkCollision :: proc(nextPos: [2]i32, using game: ^Game) {
+checkCollision :: proc(nextPos: [2]i32, using game: ^Game) -> (collision: bool) {
     for occupied in snake.body {
-        if nextPos == occupied {
-            state = .Death
-        } 
+        if nextPos == occupied do return true 
     } 
+    return false
 }
 
 handleInput :: proc(using game: ^Game) {
@@ -176,27 +181,26 @@ handleInput :: proc(using game: ^Game) {
                 state = .Quit
             } return
         }else if state == .Paused {
-        }else if state == .Paused {
             if rl.IsKeyPressed(.P){
                 state = .Running
             } return
         }
-        if rl.IsKeyDown(.ESCAPE) || rl.IsKeyDown(.Q){
+        if rl.IsKeyDown(.ESCAPE) || rl.IsKeyDown(.Q) {
             state = .Quit
         }
-        if rl.IsKeyDown(.UP) || rl.IsKeyDown(.E){
+        if rl.IsKeyDown(.UP) || rl.IsKeyDown(.E) {
             moveSnake(game, .Up)
         }
-        if rl.IsKeyDown(.DOWN) || rl.IsKeyDown(.D){
+        if rl.IsKeyDown(.DOWN) || rl.IsKeyDown(.D) {
             moveSnake(game, .Down)
         }
-        if rl.IsKeyDown(.RIGHT) || rl.IsKeyDown(.F){
+        if rl.IsKeyDown(.RIGHT) || rl.IsKeyDown(.F) {
             moveSnake(game, .Right)
         }
-        if rl.IsKeyDown(.LEFT) || rl.IsKeyDown(.S){
+        if rl.IsKeyDown(.LEFT) || rl.IsKeyDown(.S) {
             moveSnake(game, .Left)
         }
-        if rl.IsKeyPressed(.P){
+        if rl.IsKeyPressed(.P) {
             state = .Paused
         }
         else {
@@ -210,17 +214,11 @@ getFood :: proc(using game: ^Game) -> [2]i32 {
         i32(rand.float32_range(0, CELL_COLUMNS - 1, &rng)),
         i32(rand.float32_range(0, CELL_ROWS - 1, &rng)),
     }
-    /* for  */
-    /* if pos in snake.body { */
-    /*     fmt.println("we Hit!") */
-    /* } */
-    /* else { */
-    /*     fmt.println("we clear!") */
-    /* } */
+    if checkCollision(pos, game) do getFood(game)
     return pos
 }
 
-getColor :: proc(color: u32, alpha:u8= 255) -> rl.Color{
+getColor :: proc(color: u32, alpha:u8= 255) -> rl.Color {
     rgb : rl.Color
     rgb.r = u8(color >> (2*8) & 0xFF)
     rgb.g = u8(color >> (1*8) & 0xFF)
@@ -229,14 +227,15 @@ getColor :: proc(color: u32, alpha:u8= 255) -> rl.Color{
     return rgb
 }
 
-getPixlPos :: proc(vec: [2]i32, using game: ^Game) -> [2]i32 {
+posToPixel :: proc(vec: [2]i32, using game: ^Game) -> [2]i32 {
     pos : [2]i32 
     pos.x = gridPos.x + vec.x * cellSize.x
     pos.y = gridPos.y + vec.y * cellSize.y
     return pos
 }
 
-drawField :: proc(using game : ^Game) {
+draw :: proc(using game : ^Game) {
+    /* Draw Play Field */
     rl.ClearBackground(getColor(Colors["black"]))
     outLineC := getColor(Colors["brightBlack"], 50)
     inLineC := getColor(Colors["brightRed"], 255)
@@ -261,15 +260,21 @@ drawField :: proc(using game : ^Game) {
            outLineC,
        ) 
     }
-}
 
-drawSnake :: proc(using game: ^Game) {
+    /* Draw Snake */
     color := getColor(Colors["brightRed"], 150)
     if state == .Death {
         color = getColor(Colors["red"], 150)
     }
-    for xy in snake.body {
-        pos := getPixlPos(xy, game) 
-        rl.DrawRectangle(pos.x, pos.y, cellSize.x, cellSize.y, color,)
+    for pos in snake.body {
+        vec2 := posToPixel(pos, game) 
+        rl.DrawRectangle(vec2.x, vec2.y, cellSize.x, cellSize.y, color,)
+    }
+
+    /* Draw Food */
+    color = getColor(Colors["yellow"], 150)
+    for f in food {
+        f := posToPixel(f.pos, game) 
+        rl.DrawRectangle(f.x, f.y, cellSize.x, cellSize.y, color,)
     }
 }
