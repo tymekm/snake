@@ -10,15 +10,14 @@ GAME_SPEED :: 0.1
 W_WIDTH, W_HEIGHT :: 800, 600
 CELL_COLUMNS, CELL_ROWS :: 30, 20
 CELLS :: CELL_COLUMNS * CELL_ROWS
+
 Direction :: enum{Up, Left, Down, Right}
 State :: enum {Running, Paused, Death, Quit}
+Fruit :: enum { Apple, Pear, Orange}
 
-Cell :: struct {
-    pos: [2]i32,
-}
 
 Game :: struct {
-    cells : [CELLS]Cell,
+    cells : [CELLS][2]i32,
     cellSize: [2]i32,
     gridPos: [2]i32,
     gridSize: [2]i32,
@@ -29,14 +28,13 @@ Game :: struct {
 
 Snake :: struct {
     body : [dynamic][2]i32,
-    direction : Direction,
     nextPos : [2]i32,
+    direction : Direction,
 }
 
-Entity :: struct {
+Food :: struct {
     pos: [2]i32,
-    val: i32,
-    color: rl.Color,
+    type: Fruit,
 }
 
 Colors := map[string]u32{
@@ -95,11 +93,10 @@ gameInit :: proc() -> Game {
         append(&snake.body, vec)
     }
     snake.direction = Direction.Right
-
     return game
 }
 
-getPos :: proc(vec: [2]i32, game: ^Game) -> [2]i32 {
+getPixlPos :: proc(vec: [2]i32, game: ^Game) -> [2]i32 {
     using game
     pos : [2]i32 
     pos.x = gridPos.x + vec.x * cellSize.x
@@ -113,7 +110,7 @@ createGrid :: proc(game : ^Game){
     for x in 0..<CELL_COLUMNS{
         for y in 0..<CELL_ROWS{
             vec :[2]i32= {i32(x),i32(y)}
-            cells[i].pos = getPos(vec, game)
+            cells[i] = getPixlPos(vec, game)
             i+=1
         }
     }
@@ -128,11 +125,7 @@ drawField :: proc(game : ^Game) {
         f32(gridPos.x), f32(gridPos.y),
         f32(gridSize.x), f32(gridSize.y),
     }
-
-    rl.DrawRectangleLinesEx(
-        outerRec, 2,
-        inLineC,
-    )
+    rl.DrawRectangleLinesEx( outerRec, 2, inLineC)
 
     for i in 1..<CELL_COLUMNS {
        rl.DrawLine(
@@ -152,49 +145,49 @@ drawField :: proc(game : ^Game) {
 }
 
 moveSnake :: proc(game : ^Game, dirct : Direction) {
-    using game
-    nextPos :[2]i32
+    using game.snake
+    nPos :[2]i32
     #partial switch dirct {
         case .Up :
-            if snake.body[0].y == 0 {
-                nextPos = {snake.body[0].x, CELL_ROWS - 1}
-
+            if body[0].y != 0 {
+                nPos = {body[0].x, body[0].y - 1}
             } else {
-                nextPos = {snake.body[0].x, snake.body[0].y - 1}
+                nPos = {body[0].x, CELL_ROWS - 1}
             }
         case .Down :
-            if snake.body[0].y == CELL_ROWS - 1 {
-                nextPos = {snake.body[0].x, 0}
-
+            if body[0].y != CELL_ROWS - 1 {
+                nPos = {body[0].x, body[0].y + 1}
             } else {
-                nextPos = {snake.body[0].x, snake.body[0].y + 1}
+                nPos = {body[0].x, 0}
             }
         case .Left :
-            if snake.body[0].x == 0 {
-                nextPos = {CELL_COLUMNS - 1, snake.body[0].y}
+            if body[0].x != 0 {
+                nPos = {body[0].x - 1, body[0].y}
             }
             else {
-                nextPos = {snake.body[0].x - 1, snake.body[0].y}
+                nPos = {CELL_COLUMNS - 1, body[0].y}
             }
         case .Right :
-            if snake.body[0].x == CELL_COLUMNS - 1{
-                nextPos = {0, snake.body[0].y}
+            if body[0].x != CELL_COLUMNS - 1{
+                nPos = {body[0].x + 1, body[0].y}
             }
             else {
-                nextPos = {snake.body[0].x + 1, snake.body[0].y}
+                nPos = {0, body[0].y}
             }
     }
-    if nextPos != snake.body[1] {
-        checkCollision(nextPos, game)
-        snake.nextPos = nextPos
-        snake.direction = dirct
-    }
+
+    if nPos == body[1] {return}
+
+    checkCollision(nPos, game)
+    nextPos =  nPos
+    direction = dirct
+
     if game.frameTimeAcc >= GAME_SPEED {
-        it := len(snake.body) - 1
+        it := len(body) - 1
         for i := it; i > 0; i-=1 {
-            snake.body[i] = snake.body[i-1]
+            body[i] = body[i-1]
         }
-        snake.body[0] = snake.nextPos
+        body[0] = nPos
         game.frameTimeAcc -= GAME_SPEED
     }
 }
@@ -203,7 +196,7 @@ checkCollision :: proc(nextPos: [2]i32, game: ^Game) {
     using game
     for occupied in snake.body {
         if nextPos == occupied{
-            state = State.Death
+            state = .Death
         } 
     } 
 }
@@ -211,43 +204,50 @@ checkCollision :: proc(nextPos: [2]i32, game: ^Game) {
 drawSnake :: proc(game: ^Game) {
     using game
     color := getColor(Colors["brightRed"], 150)
+    if state == .Death {
+        color = getColor(Colors["red"], 150)
+    }
     for xy in snake.body {
-        pos := getPos(xy, game) 
+        pos := getPixlPos(xy, game) 
         rl.DrawRectangle(pos.x, pos.y, cellSize.x, cellSize.y, color,)
     }
 }
 
 handleInput :: proc(game: ^Game) {
-
-        if game.state == State.Death {
+        using game
+        if state == .Death {
             if rl.IsKeyPressed(.ENTER){
                 game^ = gameInit()
+            }
+            if rl.IsKeyPressed(.Q){
+                state = .Quit
             } return
-        }else if game.state == State.Paused {
+        }else if state == .Paused {
+        }else if state == .Paused {
             if rl.IsKeyPressed(.P){
-                game.state = State.Running
+                state = .Running
             } return
         }
         if rl.IsKeyDown(.ESCAPE) || rl.IsKeyDown(.Q){
-            game.state = State.Quit
+            state = .Quit
         }
         if rl.IsKeyDown(.UP) || rl.IsKeyDown(.E){
-            moveSnake(game, Direction.Up)
+            moveSnake(game, .Up)
         }
         if rl.IsKeyDown(.DOWN) || rl.IsKeyDown(.D){
-            moveSnake(game, Direction.Down)
+            moveSnake(game, .Down)
         }
         if rl.IsKeyDown(.RIGHT) || rl.IsKeyDown(.F){
-            moveSnake(game, Direction.Right)
+            moveSnake(game, .Right)
         }
         if rl.IsKeyDown(.LEFT) || rl.IsKeyDown(.S){
-            moveSnake(game, Direction.Left)
+            moveSnake(game, .Left)
         }
         if rl.IsKeyPressed(.P){
-            game.state = State.Paused
+            state = .Paused
         }
         else {
-            moveSnake(game, game.snake.direction)
+            moveSnake(game, snake.direction)
         }
 }
 
@@ -263,9 +263,9 @@ main :: proc() {
         rl.BeginDrawing()
         defer rl.EndDrawing()
         handleInput(&game)
-        if game.state != .Running {continue}
         drawField(&game)
         drawSnake(&game)
+        if game.state != .Running {continue}
         game.frameTimeAcc += rl.GetFrameTime()
     }
 }
