@@ -252,20 +252,32 @@ draw :: proc() {
     }
 
     /* Draw Snake */
-    color := getColor(Colors["brightRed"], 150)
+    c :rl.Color 
     if gameState == .Death {
-        color = getColor(Colors["red"], 150)
+        c = getColor(Colors["red"], 250)
+    }
+    else {
+        c = getColor(Colors["brightRed"], 250)
     }
     for pos in snake.body {
         vec2 := posToPixel(pos) 
-        rl.DrawRectangle(vec2.x, vec2.y, cellSize.x, cellSize.y, color,)
+        rl.DrawRectangle(i32(vec2.x), i32(vec2.y), cellSize.x, cellSize.y, c)
     }
 
     /* Draw Food */
-    c := getColor(Colors["green"], 150)
     for f in food {
-        if f.type == .Big do c = getColor(Colors["yellow"], 150)
-        f := posToPixel(f.pos) 
-        rl.DrawRectangle(f.x, f.y, cellSize.x, cellSize.y, c)
+        pos := posToPixel(f.pos)
+        size: [2]f32
+        if f.type == .Small {
+            c = getColor(Colors["brightGreen"], 250)
+            size.xy = f32(cellSize.x) * 0.5
+        }
+        else if f.type == .Big {
+            c = getColor(Colors["brightBlue"], 250)
+            size.xy = f32(cellSize.x) * 0.7
+        }
+        pos.x += i32((f32(cellSize.x) - size.x) / 2)
+        pos.y += i32((f32(cellSize.y) - size.y) / 2 + 1)
+        rl.DrawRectangle(pos.x, pos.y, i32(size.x), i32(size.y), c)
     }
 }
