@@ -14,7 +14,7 @@ CELLS :: CELL_COLUMNS * CELL_ROWS
 
 Direction :: enum{Up, Left, Down, Right}
 State :: enum {Running, Paused, Death, Quit}
-Foods :: enum {Apple, Grape, Lemon}
+Foods :: enum {Small, Big, Super}
 
 
 Game :: struct {
@@ -24,6 +24,7 @@ Game :: struct {
     gridSize: [2]i32,
     snake : Snake,
     food: [dynamic]Food,
+    score: u16,
     frameTimeAcc : f32,
     movesAcc: i32,
     state : State,
@@ -98,7 +99,7 @@ initGame :: proc() -> Game {
     gridPos.y = (W_HEIGHT  - gridSize.y) / 2
     f :Food= {
         getFood(&game),
-        Foods.Apple,
+        Foods.Small,
     }; append(&food, f)
     
     /* Init Snake */
@@ -150,18 +151,29 @@ moveSnake :: proc(game : ^Game, dirct : Direction) {
         game.state = .Death 
         return
     } 
+    foodEaten := false
 
     nextPos =  nPos
     direction = dirct
 
     if game.frameTimeAcc >= GAME_SPEED {
-        len := len(body) - 1
-        for i := len; i > 0; i-=1 {
+        lastI := len(body) - 1
+        if foodEaten == true {
+            append(&body, body[lastI])
+
+        }
+        for i := lastI; i > 0; i-=1 {
             body[i] = body[i-1]
         }
         body[0] = nPos
         game.frameTimeAcc -= GAME_SPEED
         game.movesAcc += 1
+    }
+    for i := 0; i < len(game.food); i += 1 {
+        if nPos == game.food[i].pos {
+            foodEaten = true
+            unordered_remove(&game.food, i)
+        } 
     }
 }
 
