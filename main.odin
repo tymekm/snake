@@ -1,8 +1,10 @@
 package main
 
+import "core:mem"
 import "core:time"
 import "core:fmt"
-import "core:math"
+import s "core:strconv"
+import "core:strings"
 import rl "vendor:raylib"
 import la "core:math/linalg"
 import rand "core:math/rand"
@@ -55,15 +57,16 @@ Rgb :: struct {
 }
 
 cells : [CELLS][2]i32
-cellSize: [2]i32
-gridPos: [2]i32
+cellSize: rl.Vector2
+/* cellSize: [2]i32 */
+gridPos: rl.Vector2
 gridSize: [2]i32
 
-score: u16
+score: int
 snake : Snake
 food: [dynamic]Food
 timeAcc : f32
-consumedAcc: u16
+eatenAcc: u16
 gameState : State
 
 main :: proc() {
@@ -83,12 +86,12 @@ main :: proc() {
 initGame :: proc() {
     gameState = State.Running
     /* Init Grid */
-    size := la.round(W_WIDTH * 0.8 / CELL_COLUMNS)
-    cellSize.xy = i32(size)
-    gridSize.x = cellSize.x * CELL_COLUMNS
-    gridSize.y = cellSize.y * CELL_ROWS
-    gridPos.x = (W_WIDTH  - gridSize.x) / 2
-    gridPos.y = (W_HEIGHT  - gridSize.y) / 2
+    size := f32(la.round(W_WIDTH * 0.8 / CELL_COLUMNS))
+    cellSize.xy = size
+    gridSize.x = i32(cellSize.x) * CELL_COLUMNS
+    gridSize.y = i32(cellSize.y) * CELL_ROWS
+    gridPos.x = f32((W_WIDTH  - gridSize.x) / 2)
+    gridPos.y = f32((W_HEIGHT  - gridSize.y) / 2)
     /* Init Snake */
     snake.body = {}
     snake.direction = Direction.Right
@@ -117,7 +120,7 @@ updateGame :: proc() {
     if rl.IsKeyPressed(.ESCAPE)|| rl.IsKeyPressed(.Q) do gameState = .Quit
 
     if gameState != .Running {return}
-    direction : Direction
+
     if rl.IsKeyPressed(.UP)    || rl.IsKeyPressed(.E) && snake.direction != .Down {
         snake.direction = .Up
     } 
@@ -160,7 +163,6 @@ updateGame :: proc() {
                 nPos = {0, snake.body[0].y}
             }
     }
-    fmt.println(nPos)
 
     if collision(nPos) {
         gameState = .Death 
@@ -168,7 +170,6 @@ updateGame :: proc() {
     } 
 
     if timeAcc >= MOVE_SPEED {
-        fmt.println("we should move")
         lastI := len(snake.body) - 1
         /* if snake.eaten == true { */
         /*     append(&snake.body, snake.body[lastI]) */
@@ -181,20 +182,26 @@ updateGame :: proc() {
         timeAcc -= MOVE_SPEED
     }
 
-    /* /* Handle Fruit */ */
-    /* for i := 0; i < len(food); i += 1 { */
-    /*     if nPos == food[i].pos && food[i].type == .Small { */
-    /*         unordered_remove(&food, i) */
-    /*         append(&food, getFood(.Small)) */
-    /*         snake.eaten = true */
-    /*         consumedAcc += 1 */
-    /*         fmt.println(consumedAcc) */
-    /*     }  */
-    /* } */
-    /* if snake.eaten == true && consumedAcc % 5 == 0 { */
-    /*     append(&food, getFood(.Big)) */
-    /*    snake.eaten = false */
-    /* } */
+    /* Handle Fruit */
+    for i := 0; i < len(food); i += 1 {
+        if snake.body[0] == food[i].pos {
+            if food[i].type == .Small {
+                score += 1 
+                eatenAcc += 1
+                append(&food, getFood(.Small))
+            }
+            else if food[i].type == .Big {
+                score += 5 
+                eatenAcc += 1
+            }
+            unordered_remove(&food, i)
+            snake.eaten = true
+        } 
+    }
+    if snake.eaten == true && eatenAcc % 5 == 0 {
+        append(&food, getFood(.Big))
+       snake.eaten = false
+    }
     timeAcc += rl.GetFrameTime()
 }
 
@@ -223,9 +230,9 @@ getColor :: proc(color: u32, alpha:u8= 255) -> rl.Color {
     return {red, green, blue, alpha}
 }
 
-posToPixel :: proc(vec: [2]i32) -> [2]i32 {
-    x := gridPos.x + vec.x * cellSize.x
-    y := gridPos.y + vec.y * cellSize.y
+posToPixel :: proc(vec: [2]i32) -> rl.Vector2 {
+    x := gridPos.x + f32(vec.x) * cellSize.x
+    y := gridPos.y + f32(vec.y) * cellSize.y
     return {x, y}
 }
 
@@ -241,19 +248,27 @@ draw :: proc() {
     rl.DrawRectangleLinesEx( outerRec, 2, inLineC)
 
     for i in 1..<CELL_COLUMNS {
-       rl.DrawLine(
-           gridPos.x + i32(i) * cellSize.x, gridPos.y,
-           gridPos.x + i32(i) * cellSize.x, gridPos.y + gridSize.y,
-           outLineC,
-       ) 
+        posVec2 :rl.Vector2= {
+            gridPos.x + f32(i) * cellSize.x,
+            gridPos.y,
+        }
+        sizeVec2 :rl.Vector2= {
+            gridPos.x + f32(i) * cellSize.x,
+            gridPos.y + f32(gridSize.y),
+        }
+       rl.DrawLineV(posVec2, sizeVec2, outLineC) 
     }
 
     for i in 1..<CELL_ROWS {
-       rl.DrawLine(
-           gridPos.x, gridPos.y + i32(i) * cellSize.y,
-           gridPos.x + gridSize.x, gridPos.y + i32(i) * cellSize.y,
-           outLineC,
-       ) 
+        posVec2 :rl.Vector2= {
+            gridPos.x,
+            gridPos.y + f32(i) * cellSize.y,
+        }
+        sizeVec2 :rl.Vector2= {
+            gridPos.x + f32(gridSize.x),
+            gridPos.y + f32(i) * cellSize.y,
+        }
+       rl.DrawLineV(posVec2, sizeVec2, outLineC) 
     }
 
     /* Draw Snake */
@@ -266,23 +281,45 @@ draw :: proc() {
     }
     for pos in snake.body {
         vec2 := posToPixel(pos) 
-        rl.DrawRectangle(i32(vec2.x), i32(vec2.y), cellSize.x, cellSize.y, c)
+        rl.DrawRectangleV(vec2, cellSize, c)
     }
 
     /* Draw Food */
     for f in food {
         pos := posToPixel(f.pos)
-        size: [2]f32
+        size: rl.Vector2
         if f.type == .Small {
             c = getColor(Colors["brightGreen"], 250)
-            size.xy = f32(cellSize.x) * 0.5
+            size.xy = cellSize.x * 0.5
         }
         else if f.type == .Big {
             c = getColor(Colors["brightBlue"], 250)
-            size.xy = f32(cellSize.x) * 0.7
+            size.xy = cellSize.x * 0.7
         }
-        pos.x += i32((f32(cellSize.x) - size.x) / 2)
-        pos.y += i32((f32(cellSize.y) - size.y) / 2 + 1)
-        rl.DrawRectangle(pos.x, pos.y, i32(size.x), i32(size.y), c)
+        pos.x += (cellSize.x - size.x) / 2
+        pos.y += (cellSize.y - size.y) / 2 + 1
+        rl.DrawRectangleV(pos, size, c)
     }
+
+    /* Draw Score */
+    c = getColor(Colors["blue"])
+
+    
+    buf :[8]byte={}
+    fSize :f32= 25
+    text := strings.clone_to_cstring(s.itoa(buf[:], score))
+
+    font := rl.LoadFont("./fonts/8bitOperatorPlus8-Regular.ttf")
+    /* font := rl.GetFontDefault() */
+    test :cstring= "Snake!"
+    len := len(test)
+    fontSize := f32(font.baseSize) * 1.2
+    spacing :f32= 3
+    textVec2 := rl.MeasureTextEx(font, test, fontSize, spacing)
+    pos := rl.Vector2 {
+        f32(W_WIDTH) / 2.0 - textVec2.x / 2.0,
+        10,
+    }
+    rl.DrawTextEx(font, test, pos, fontSize, spacing ,c)
+    /* rl.DrawText(cstring(text), 0,0,fz ,c) */
 }
