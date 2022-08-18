@@ -1,13 +1,14 @@
 package main
-import rand "core:math/rand"
+
 import "core:time"
 import "core:fmt"
+import "core:math"
 import rl "vendor:raylib"
 import la "core:math/linalg"
-import "core:math"
+import rand "core:math/rand"
 
-FPS :: 60
-GAME_SPEED :: 0.1
+FPS :: 20
+MOVE_SPEED :: 0.1
 W_WIDTH, W_HEIGHT :: 800, 600
 CELL_COLUMNS, CELL_ROWS :: 30, 20
 CELLS :: CELL_COLUMNS * CELL_ROWS
@@ -18,7 +19,6 @@ Foods :: enum {Small, Big, Super}
 
 Snake :: struct {
     body: [dynamic][2]i32,
-    nextPos: [2]i32,
     direction: Direction,
     eaten: bool,
 }
@@ -58,10 +58,11 @@ cells : [CELLS][2]i32
 cellSize: [2]i32
 gridPos: [2]i32
 gridSize: [2]i32
+
+score: u16
 snake : Snake
 food: [dynamic]Food
-score: u16
-frameTimeAcc : f32
+timeAcc : f32
 consumedAcc: u16
 gameState : State
 
@@ -109,41 +110,49 @@ updateGame :: proc() {
         return
     }else if gameState == .Paused {
         if rl.IsKeyPressed(.P) do gameState = .Running
+        if rl.IsKeyPressed(.Q) do gameState = .Quit
         return
     }
     if rl.IsKeyPressed(.P) do gameState = .Paused
-    if rl.IsKeyDown(.ESCAPE) || rl.IsKeyDown(.Q) do gameState = .Quit
+    if rl.IsKeyPressed(.ESCAPE)|| rl.IsKeyPressed(.Q) do gameState = .Quit
 
     if gameState != .Running {return}
-    nextDir := snake.direction
-    if rl.IsKeyDown(.UP) || rl.IsKeyDown(.E) do nextDir = .Up
-    if rl.IsKeyDown(.DOWN) || rl.IsKeyDown(.D) do nextDir = .Down
-    if rl.IsKeyDown(.RIGHT) || rl.IsKeyDown(.F) do nextDir = .Right
-    if rl.IsKeyDown(.LEFT) || rl.IsKeyDown(.S) do nextDir = .Left
+    direction : Direction
+    if rl.IsKeyPressed(.UP)    || rl.IsKeyPressed(.E) && snake.direction != .Down {
+        snake.direction = .Up
+    } 
+    if rl.IsKeyPressed(.DOWN)  || rl.IsKeyPressed(.D) && snake.direction != .Up  {
+        snake.direction = .Down
+    }
+    if rl.IsKeyPressed(.RIGHT) || rl.IsKeyPressed(.F) && snake.direction != .Left {
+        snake.direction = .Right
+    }
+    if rl.IsKeyPressed(.LEFT)  || rl.IsKeyPressed(.S) && snake.direction != .Right {
+        snake.direction = .Left
+    }
 
-    /* Move Snake */
-    nPos :[2]i32
+    nPos :[2]i32 = {0,0}
     #partial switch snake.direction {
-        case .Up :
+        case .Up:
             if snake.body[0].y != 0 {
                 nPos = {snake.body[0].x, snake.body[0].y - 1}
             } else {
                 nPos = {snake.body[0].x, CELL_ROWS - 1}
             }
-        case .Down :
+        case .Down:
             if snake.body[0].y != CELL_ROWS - 1 {
                 nPos = {snake.body[0].x, snake.body[0].y + 1}
             } else {
                 nPos = {snake.body[0].x, 0}
             }
-        case .Left :
+        case .Left:
             if snake.body[0].x != 0 {
                 nPos = {snake.body[0].x - 1, snake.body[0].y}
             }
             else {
                 nPos = {CELL_COLUMNS - 1, snake.body[0].y}
             }
-        case .Right :
+        case .Right:
             if snake.body[0].x != CELL_COLUMNS - 1{
                 nPos = {snake.body[0].x + 1, snake.body[0].y}
             }
@@ -151,50 +160,46 @@ updateGame :: proc() {
                 nPos = {0, snake.body[0].y}
             }
     }
+    fmt.println(nPos)
 
-    if nPos == snake.body[1] do return
-
-    if checkCollision(nPos) {
+    if collision(nPos) {
         gameState = .Death 
         return
     } 
 
-    snake.nextPos =  nPos
-    snake.direction = nextDir
-
-    if frameTimeAcc >= GAME_SPEED {
-        consumedAcc += 1
+    if timeAcc >= MOVE_SPEED {
+        fmt.println("we should move")
         lastI := len(snake.body) - 1
-        if snake.eaten == true {
-            append(&snake.body, snake.body[lastI])
-            snake.eaten = false
-        }
+        /* if snake.eaten == true { */
+        /*     append(&snake.body, snake.body[lastI]) */
+        /*     snake.eaten = false */
+        /* } */
         for i := lastI; i > 0; i-=1 {
             snake.body[i] = snake.body[i-1]
         }
         snake.body[0] = nPos
-        frameTimeAcc -= GAME_SPEED
+        timeAcc -= MOVE_SPEED
     }
 
-    /* Handle Fruit */
-    for i := 0; i < len(food); i += 1 {
-        if nPos == food[i].pos && food[i].type == .Small {
-            unordered_remove(&food, i)
-            append(&food, getFood(.Small))
-            snake.eaten = true
-            consumedAcc += 1
-            fmt.println(consumedAcc)
-        } 
-    }
-    if snake.eaten == true && consumedAcc % 5 == 0 {
-        append(&food, getFood(.Big))
-       snake.eaten = false
-    }
-    frameTimeAcc += rl.GetFrameTime()
+    /* /* Handle Fruit */ */
+    /* for i := 0; i < len(food); i += 1 { */
+    /*     if nPos == food[i].pos && food[i].type == .Small { */
+    /*         unordered_remove(&food, i) */
+    /*         append(&food, getFood(.Small)) */
+    /*         snake.eaten = true */
+    /*         consumedAcc += 1 */
+    /*         fmt.println(consumedAcc) */
+    /*     }  */
+    /* } */
+    /* if snake.eaten == true && consumedAcc % 5 == 0 { */
+    /*     append(&food, getFood(.Big)) */
+    /*    snake.eaten = false */
+    /* } */
+    timeAcc += rl.GetFrameTime()
 }
 
 
-checkCollision :: proc(nextPos: [2]i32) -> (collision: bool) {
+collision :: proc(nextPos: [2]i32) -> (collision: bool) {
     for occupied in snake.body {
         if nextPos == occupied do return true 
     } 
@@ -207,7 +212,7 @@ getFood :: proc(type: Foods) -> Food {
         i32(rand.float32_range(0, CELL_COLUMNS - 1, &rng)),
         i32(rand.float32_range(0, CELL_ROWS - 1, &rng)),
     }
-    if checkCollision(pos) do getFood(type)
+    if collision(pos) do getFood(type)
     return {pos, type}
 }
 
