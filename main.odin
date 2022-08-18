@@ -58,7 +58,6 @@ Rgb :: struct {
 
 cells : [CELLS][2]i32
 cellSize: rl.Vector2
-/* cellSize: [2]i32 */
 gridPos: rl.Vector2
 gridSize: [2]i32
 
@@ -88,10 +87,10 @@ initGame :: proc() {
     /* Init Grid */
     size := f32(la.round(W_WIDTH * 0.8 / CELL_COLUMNS))
     cellSize.xy = size
-    gridSize.x = i32(cellSize.x) * CELL_COLUMNS
-    gridSize.y = i32(cellSize.y) * CELL_ROWS
-    gridPos.x = f32((W_WIDTH  - gridSize.x) / 2)
-    gridPos.y = f32((W_HEIGHT  - gridSize.y) / 2)
+    gridSize.x  = i32(cellSize.x) * CELL_COLUMNS
+    gridSize.y  = i32(cellSize.y) * CELL_ROWS
+    gridPos.x   = f32((W_WIDTH  - gridSize.x) / 2)
+    gridPos.y   = f32((W_HEIGHT  - gridSize.y) / 2)
     /* Init Snake */
     snake.body = {}
     snake.direction = Direction.Right
@@ -121,50 +120,47 @@ updateGame :: proc() {
 
     if gameState != .Running {return}
 
-    if rl.IsKeyPressed(.UP)    || rl.IsKeyPressed(.E) && snake.direction != .Down {
-        snake.direction = .Up
-    } 
-    if rl.IsKeyPressed(.DOWN)  || rl.IsKeyPressed(.D) && snake.direction != .Up  {
-        snake.direction = .Down
-    }
-    if rl.IsKeyPressed(.RIGHT) || rl.IsKeyPressed(.F) && snake.direction != .Left {
-        snake.direction = .Right
-    }
-    if rl.IsKeyPressed(.LEFT)  || rl.IsKeyPressed(.S) && snake.direction != .Right {
-        snake.direction = .Left
-    }
+    nextDir: Direction
+    if rl.IsKeyPressed(.UP) || rl.IsKeyPressed(.E) do nextDir = .Up  
+    else if rl.IsKeyPressed(.DOWN) || rl.IsKeyPressed(.D) do nextDir = .Down 
+    else if rl.IsKeyPressed(.RIGHT)|| rl.IsKeyPressed(.F) do nextDir = .Right 
+    else if rl.IsKeyPressed(.LEFT) || rl.IsKeyPressed(.S) do nextDir = .Left 
+    else do nextDir = snake.direction
 
-    nPos :[2]i32 = {0,0}
-    #partial switch snake.direction {
+    nextPos :[2]i32
+    #partial switch nextDir {
         case .Up:
             if snake.body[0].y != 0 {
-                nPos = {snake.body[0].x, snake.body[0].y - 1}
+                nextPos = {snake.body[0].x, snake.body[0].y - 1}
             } else {
-                nPos = {snake.body[0].x, CELL_ROWS - 1}
+                nextPos = {snake.body[0].x, CELL_ROWS - 1}
             }
         case .Down:
             if snake.body[0].y != CELL_ROWS - 1 {
-                nPos = {snake.body[0].x, snake.body[0].y + 1}
+                nextPos = {snake.body[0].x, snake.body[0].y + 1}
             } else {
-                nPos = {snake.body[0].x, 0}
+                nextPos = {snake.body[0].x, 0}
             }
         case .Left:
             if snake.body[0].x != 0 {
-                nPos = {snake.body[0].x - 1, snake.body[0].y}
+                nextPos = {snake.body[0].x - 1, snake.body[0].y}
             }
             else {
-                nPos = {CELL_COLUMNS - 1, snake.body[0].y}
+                nextPos = {CELL_COLUMNS - 1, snake.body[0].y}
             }
         case .Right:
             if snake.body[0].x != CELL_COLUMNS - 1{
-                nPos = {snake.body[0].x + 1, snake.body[0].y}
+                nextPos = {snake.body[0].x + 1, snake.body[0].y}
             }
             else {
-                nPos = {0, snake.body[0].y}
+                nextPos = {0, snake.body[0].y}
             }
     }
 
-    if collision(nPos) {
+    if nextPos == snake.body[1] do return
+    snake.direction = nextDir
+
+    if collision(nextPos) {
         gameState = .Death 
         return
     } 
@@ -178,7 +174,7 @@ updateGame :: proc() {
         for i := lastI; i > 0; i-=1 {
             snake.body[i] = snake.body[i-1]
         }
-        snake.body[0] = nPos
+        snake.body[0] = nextPos
         timeAcc -= MOVE_SPEED
     }
 
@@ -304,7 +300,6 @@ draw :: proc() {
     /* Draw Score */
     c = getColor(Colors["blue"])
 
-    
     buf :[8]byte={}
     fSize :f32= 25
     text := strings.clone_to_cstring(s.itoa(buf[:], score))
