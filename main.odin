@@ -3,14 +3,15 @@ package main
 import "core:mem"
 import "core:time"
 import "core:fmt"
-import s "core:strconv"
+import "core:strconv"
 import "core:strings"
+import "core:math"
 import rl "vendor:raylib"
 import la "core:math/linalg"
 import rand "core:math/rand"
 
-FPS :: 20
-MOVE_SPEED :: 0.1
+FPS :: 60
+GAME_SPEED :u8: 10
 W_WIDTH, W_HEIGHT :: 800, 600
 CELL_COLUMNS, CELL_ROWS :: 30, 20
 CELLS :: CELL_COLUMNS * CELL_ROWS
@@ -56,17 +57,19 @@ Rgb :: struct {
     a : u8,
 }
 
-cells : [CELLS][2]i32
+cells :   [CELLS][2]i32
 cellSize: rl.Vector2
-gridPos: rl.Vector2
+gridPos:  rl.Vector2
 gridSize: [2]i32
 
-score: int
-snake : Snake
-food: [dynamic]Food
-timeAcc : f32
-eatenAcc: u16
-gameState : State
+score:     int
+snake:     Snake
+food:      [dynamic]Food
+timeAcc:   f32
+eatenAcc:  u16
+gameState: State
+moveSpeed: f32
+scoreMultiplier: f32
 
 main :: proc() {
     rl.InitWindow(W_WIDTH, W_HEIGHT, "Snake!")
@@ -102,6 +105,10 @@ initGame :: proc() {
     /* Init Food */
     food = {}
     append(&food, getFood(.Small))
+
+    score = 0
+    moveSpeed = 1 / f32(GAME_SPEED)
+    scoreMultiplier = math.sqrt(f32(GAME_SPEED))
 }
 
 updateGame :: proc() {
@@ -165,29 +172,29 @@ updateGame :: proc() {
         return
     } 
 
-    if timeAcc >= MOVE_SPEED {
+    if timeAcc >= moveSpeed {
         lastI := len(snake.body) - 1
-        /* if snake.eaten == true { */
-        /*     append(&snake.body, snake.body[lastI]) */
-        /*     snake.eaten = false */
-        /* } */
+        if snake.eaten == true {
+            append(&snake.body, snake.body[lastI])
+            snake.eaten = false
+        }
         for i := lastI; i > 0; i-=1 {
             snake.body[i] = snake.body[i-1]
         }
         snake.body[0] = nextPos
-        timeAcc -= MOVE_SPEED
+        timeAcc -= moveSpeed
     }
 
     /* Handle Fruit */
     for i := 0; i < len(food); i += 1 {
         if snake.body[0] == food[i].pos {
             if food[i].type == .Small {
-                score += 1 
+                score += int(math.round(1.0 * scoreMultiplier))
                 eatenAcc += 1
                 append(&food, getFood(.Small))
             }
             else if food[i].type == .Big {
-                score += 5 
+                score += int(math.round(3.0 * scoreMultiplier))
                 eatenAcc += 1
             }
             unordered_remove(&food, i)
@@ -196,7 +203,7 @@ updateGame :: proc() {
     }
     if snake.eaten == true && eatenAcc % 5 == 0 {
         append(&food, getFood(.Big))
-       snake.eaten = false
+        snake.eaten = false
     }
     timeAcc += rl.GetFrameTime()
 }
@@ -297,24 +304,35 @@ draw :: proc() {
         rl.DrawRectangleV(pos, size, c)
     }
 
-    /* Draw Score */
+    /* Draw Title */
     c = getColor(Colors["blue"])
-
-    buf :[8]byte={}
     fSize :f32= 25
-    text := strings.clone_to_cstring(s.itoa(buf[:], score))
-
     font := rl.LoadFont("./fonts/8bitOperatorPlus8-Regular.ttf")
-    /* font := rl.GetFontDefault() */
-    test :cstring= "Snake!"
-    len := len(test)
+
+    text :cstring= "Snake!"
     fontSize := f32(font.baseSize) * 1.2
     spacing :f32= 3
-    textVec2 := rl.MeasureTextEx(font, test, fontSize, spacing)
+    textSizeVec2 := rl.MeasureTextEx(font, text, fontSize, spacing)
     pos := rl.Vector2 {
-        f32(W_WIDTH) / 2.0 - textVec2.x / 2.0,
+        f32(W_WIDTH) / 2.0 - textSizeVec2.x / 2.0,
         10,
     }
-    rl.DrawTextEx(font, test, pos, fontSize, spacing ,c)
-    /* rl.DrawText(cstring(text), 0,0,fz ,c) */
+    rl.DrawTextEx(font, text, pos, fontSize, spacing ,c)
+
+    /* Draw Score */
+    buf :[256]byte={}
+    str := strings.join({
+        "Score",
+        strconv.itoa(buf[:], score)
+    }, ": ")
+    defer delete(str)
+    text = strings.clone_to_cstring(str)
+    fontSize = f32(font.baseSize) * 0.8
+    spacing = 0
+    textSizeVec2 = rl.MeasureTextEx(font, text, fontSize, spacing)
+    pos = rl.Vector2 {
+        gridPos.x + f32(gridSize.x) - textSizeVec2.x,
+        10,
+    }
+    rl.DrawTextEx(font, text, pos, fontSize, spacing ,c)
 }
