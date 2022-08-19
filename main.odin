@@ -32,16 +32,17 @@ Food :: struct {
 }
 
 Colors := map[string]u32{
-    "background" =    0x2A2A37,
-    "gridbackg" =     0x363646,
-    "gridlines" =     0xDCD7BA,
-    "gridborder" =    0xC8C093,
-    "text" =          0xDCD7BA,
-    "snake" =         0x7E9CD8,
-    "snakedead" =     0xC34043,
-    "smallfood" =     0xC34043,
-    "bigfood" =       0x98BB6C,
-    "superfood" =     0x957FB8,
+    "windowbg"   = 0x1F1F28,
+    "gridbg"     = 0x2A2A37,
+    "gridlines"  = 0xDCD7BA,
+    "gridborder" = 0xC8C093,
+    "infobg"     = 0xC8C093,
+    "text"       = 0xDCD7BA,
+    "snake"      = 0x7E9CD8,
+    "snakedead"  = 0xE82424,
+    "smallfood"  = 0xC34043,
+    "bigfood"    = 0x98BB6C,
+    "superfood"  = 0x957FB8,
 }
 
 Rgb :: struct {
@@ -237,12 +238,12 @@ posToPixel :: proc(vec: [2]i32) -> rl.Vector2 {
 
 draw :: proc() {
     /* Draw Play Field */
-    rl.ClearBackground(getColor(Colors["background"]))
+    rl.ClearBackground(getColor(Colors["windowbg"]))
     outerRec := rl.Rectangle {
         f32(gridPos.x), f32(gridPos.y),
         f32(gridSize.x), f32(gridSize.y),
     }
-    gridbg := getColor(Colors["gridbackg"], 255)
+    gridbg := getColor(Colors["gridbg"], 255)
     rl.DrawRectangleRec( outerRec, gridbg)
     inLineC := getColor(Colors["gridlines"], 255)
     rl.DrawRectangleLinesEx( outerRec, 1, inLineC)
@@ -304,8 +305,9 @@ draw :: proc() {
 
     /* Draw Title */
     c = getColor(Colors["text"])
-    fSize :f32= 25
     font := rl.LoadFont("./fonts/8bitOperatorPlus8-Regular.ttf")
+
+    fSize :f32= 25
 
     text :cstring= "Snake!"
     fontSize := f32(font.baseSize) * 1.2
@@ -333,4 +335,46 @@ draw :: proc() {
         gridPos.y - textSizeVec2.y - 10,
     }
     rl.DrawTextEx(font, text, pos, fontSize, spacing ,c)
+    if gameState == .Paused do drawInfoBox("Paused", "Press 'P' to continue")
+    if gameState == .Death do drawInfoBox("GameOver!", "Press 'Enter' to play again or 'Q' to quit")
+}
+
+drawInfoBox :: proc(header: string, text: string) {
+    font := rl.LoadFont("./fonts/8bitOperatorPlus8-Regular.ttf")
+
+    h := strings.clone_to_cstring(header)
+    hFontSize := f32(font.baseSize) * 1
+    headerSize:= rl.MeasureTextEx(font, h, hFontSize, 0)
+
+    t := strings.clone_to_cstring(text)
+    tFontSize := f32(font.baseSize) * 0.4
+    textSize := rl.MeasureTextEx(font, t, tFontSize, 0)
+    textPadding :f32= 10
+
+    headerPos := rl.Vector2 {
+        W_WIDTH/2 - headerSize.x/2,
+        W_HEIGHT/2 - (headerSize.y + textSize.y + textPadding)/2,
+    }
+    textPos := rl.Vector2 {
+        W_WIDTH/2 - textSize.x/2,
+        W_HEIGHT/2 - (headerSize.y + textSize.y + textPadding)/2 + headerSize.y + textPadding,
+    }
+
+    c := getColor(Colors["windowbg"], 190)
+    textWidth: f32
+    if headerSize.x > textSize.x do textWidth = headerSize.x
+    else do textWidth = textSize.x
+    ibPadding :i32= 20
+    ibW: i32 = i32(textWidth) + ibPadding
+    ibH: i32 = i32(textSize.y + headerSize.y + textPadding) + ibPadding
+    fmt.println("Info box Height ", ibH)
+    fmt.println("Text Height", i32(textSize.y + headerSize.y + textPadding))
+    ibX: i32 = W_WIDTH/2 - ibW/2
+    ibY: i32 = W_HEIGHT/2 - ibH/2
+
+    rl.DrawRectangle(ibX, ibY, ibW, ibH, c)
+
+    c = getColor(Colors["text"])
+    rl.DrawTextEx(font, h, headerPos, hFontSize, 0, c)
+    rl.DrawTextEx(font, t, textPos, tFontSize, 0, c)
 }
