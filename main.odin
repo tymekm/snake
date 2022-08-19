@@ -327,12 +327,12 @@ draw :: proc() {
     }, ": ")
     defer delete(str)
     text = strings.clone_to_cstring(str)
-    fontSize = f32(font.baseSize) * 0.8
+    fontSize = f32(font.baseSize) * 0.7
     spacing = 0
     textSizeVec2 = rl.MeasureTextEx(font, text, fontSize, spacing)
     pos = rl.Vector2 {
         gridPos.x + f32(gridSize.x) - textSizeVec2.x,
-        10,
+        gridPos.y - textSizeVec2.y - 10,
     }
     rl.DrawTextEx(font, text, pos, fontSize, spacing ,c)
 }
