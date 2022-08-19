@@ -32,22 +32,16 @@ Food :: struct {
 }
 
 Colors := map[string]u32{
-    "black" =         0x282828,
-    "red" =           0xcc241d,
-    "green" =         0x98971a,
-    "yellow" =        0xd79921,
-    "blue" =          0x458588,
-    "magenta" =       0xb16286,
-    "cyan" =          0x689d6a,
-    "white" =         0xa89984,
-    "brightBlack" =   0x928374,
-    "brightRed" =     0xfb4934,
-    "brightGreen" =   0xb8bb26,
-    "brightYellow" =  0xfabd2f,
-    "brightBlue" =    0x83a598,
-    "brightMagenta" = 0xd3869b,
-    "brightCyan" =    0x8ec07c,
-    "brightWhite" =   0xebdbb2,
+    "background" =    0x2A2A37,
+    "gridbackg" =     0x363646,
+    "gridlines" =     0xDCD7BA,
+    "gridborder" =    0xC8C093,
+    "text" =          0xDCD7BA,
+    "snake" =         0x7E9CD8,
+    "snakedead" =     0xC34043,
+    "smallfood" =     0xC34043,
+    "bigfood" =       0x98BB6C,
+    "superfood" =     0x957FB8,
 }
 
 Rgb :: struct {
@@ -222,7 +216,9 @@ getFood :: proc(type: Foods) -> Food {
         i32(rand.float32_range(0, CELL_COLUMNS - 1, &rng)),
         i32(rand.float32_range(0, CELL_ROWS - 1, &rng)),
     }
-    if collision(pos) do getFood(type)
+    if collision(pos) {
+        getFood(type)
+    } 
     return {pos, type}
 }
 
@@ -241,15 +237,17 @@ posToPixel :: proc(vec: [2]i32) -> rl.Vector2 {
 
 draw :: proc() {
     /* Draw Play Field */
-    rl.ClearBackground(getColor(Colors["black"]))
-    outLineC := getColor(Colors["brightBlack"], 50)
-    inLineC := getColor(Colors["brightRed"], 255)
+    rl.ClearBackground(getColor(Colors["background"]))
     outerRec := rl.Rectangle {
         f32(gridPos.x), f32(gridPos.y),
         f32(gridSize.x), f32(gridSize.y),
     }
-    rl.DrawRectangleLinesEx( outerRec, 2, inLineC)
+    gridbg := getColor(Colors["gridbackg"], 255)
+    rl.DrawRectangleRec( outerRec, gridbg)
+    inLineC := getColor(Colors["gridlines"], 255)
+    rl.DrawRectangleLinesEx( outerRec, 1, inLineC)
 
+    outLineC := getColor(Colors["gridborder"], 50)
     for i in 1..<CELL_COLUMNS {
         posVec2 :rl.Vector2= {
             gridPos.x + f32(i) * cellSize.x,
@@ -259,7 +257,7 @@ draw :: proc() {
             gridPos.x + f32(i) * cellSize.x,
             gridPos.y + f32(gridSize.y),
         }
-       rl.DrawLineV(posVec2, sizeVec2, outLineC) 
+        rl.DrawLineV(posVec2, sizeVec2, outLineC) 
     }
 
     for i in 1..<CELL_ROWS {
@@ -277,10 +275,10 @@ draw :: proc() {
     /* Draw Snake */
     c :rl.Color 
     if gameState == .Death {
-        c = getColor(Colors["red"], 250)
+        c = getColor(Colors["snakedead"], 250)
     }
     else {
-        c = getColor(Colors["brightRed"], 250)
+        c = getColor(Colors["snake"], 250)
     }
     for pos in snake.body {
         vec2 := posToPixel(pos) 
@@ -292,11 +290,11 @@ draw :: proc() {
         pos := posToPixel(f.pos)
         size: rl.Vector2
         if f.type == .Small {
-            c = getColor(Colors["brightGreen"], 250)
+            c = getColor(Colors["smallfood"], 250)
             size.xy = cellSize.x * 0.5
         }
         else if f.type == .Big {
-            c = getColor(Colors["brightBlue"], 250)
+            c = getColor(Colors["bigfood"], 250)
             size.xy = cellSize.x * 0.7
         }
         pos.x += (cellSize.x - size.x) / 2
@@ -305,7 +303,7 @@ draw :: proc() {
     }
 
     /* Draw Title */
-    c = getColor(Colors["blue"])
+    c = getColor(Colors["text"])
     fSize :f32= 25
     font := rl.LoadFont("./fonts/8bitOperatorPlus8-Regular.ttf")
 
@@ -315,16 +313,16 @@ draw :: proc() {
     textSizeVec2 := rl.MeasureTextEx(font, text, fontSize, spacing)
     pos := rl.Vector2 {
         f32(W_WIDTH) / 2.0 - textSizeVec2.x / 2.0,
-        10,
+        gridPos.y/2 - textSizeVec2.y/2,
     }
     rl.DrawTextEx(font, text, pos, fontSize, spacing ,c)
 
     /* Draw Score */
     buf :[256]byte={}
     str := strings.join({
-        "Score",
-        strconv.itoa(buf[:], score)
-    }, ": ")
+        "Score", strconv.itoa(buf[:], score)},
+        ": "
+    )
     defer delete(str)
     text = strings.clone_to_cstring(str)
     fontSize = f32(font.baseSize) * 0.7
