@@ -1,6 +1,5 @@
 package main
 
-import "core:mem"
 import "core:time"
 import "core:fmt"
 import "core:strconv"
@@ -56,6 +55,7 @@ cells :   [CELLS][2]i32
 cellSize: rl.Vector2
 gridPos:  rl.Vector2
 gridSize: [2]i32
+font, fontBold : rl.Font
 
 score:     int
 snake:     Snake
@@ -89,6 +89,12 @@ initGame :: proc() {
     gridSize.y  = i32(cellSize.y) * CELL_ROWS
     gridPos.x   = f32((W_WIDTH  - gridSize.x) / 2)
     gridPos.y   = f32((W_HEIGHT  - gridSize.y) / 2)
+
+    score = 0
+    moveSpeed = 1 / f32(GAME_SPEED)
+    scoreMultiplier = math.sqrt(f32(GAME_SPEED))
+    font = rl.LoadFont("./fonts/8bitOperatorPlus-Regular.ttf")
+    fontBold = rl.LoadFont("./fonts/8bitOperatorPlus-Bold.ttf")
     /* Init Snake */
     snake.body = {}
     snake.direction = Direction.Right
@@ -100,10 +106,6 @@ initGame :: proc() {
     /* Init Food */
     food = {}
     append(&food, getFood(.Small))
-
-    score = 0
-    moveSpeed = 1 / f32(GAME_SPEED)
-    scoreMultiplier = math.sqrt(f32(GAME_SPEED))
 }
 
 updateGame :: proc() {
@@ -112,7 +114,7 @@ updateGame :: proc() {
         if rl.IsKeyPressed(.ENTER) do initGame()
         if rl.IsKeyPressed(.Q) do gameState = .Quit
         return
-    }else if gameState == .Paused {
+    } else if gameState == .Paused {
         if rl.IsKeyPressed(.P) do gameState = .Running
         if rl.IsKeyPressed(.Q) do gameState = .Quit
         return
@@ -146,15 +148,13 @@ updateGame :: proc() {
         case .Left:
             if snake.body[0].x != 0 {
                 nextPos = {snake.body[0].x - 1, snake.body[0].y}
-            }
-            else {
+            } else {
                 nextPos = {CELL_COLUMNS - 1, snake.body[0].y}
             }
         case .Right:
             if snake.body[0].x != CELL_COLUMNS - 1{
                 nextPos = {snake.body[0].x + 1, snake.body[0].y}
-            }
-            else {
+            } else {
                 nextPos = {0, snake.body[0].y}
             }
     }
@@ -187,8 +187,7 @@ updateGame :: proc() {
                 score += int(math.round(1.0 * scoreMultiplier))
                 eatenAcc += 1
                 append(&food, getFood(.Small))
-            }
-            else if food[i].type == .Big {
+            } else if food[i].type == .Big {
                 score += int(math.round(3.0 * scoreMultiplier))
                 eatenAcc += 1
             }
@@ -277,8 +276,7 @@ draw :: proc() {
     c :rl.Color 
     if gameState == .Death {
         c = getColor(Colors["snakedead"], 250)
-    }
-    else {
+    } else {
         c = getColor(Colors["snake"], 250)
     }
     for pos in snake.body {
@@ -293,8 +291,7 @@ draw :: proc() {
         if f.type == .Small {
             c = getColor(Colors["smallfood"], 250)
             size.xy = cellSize.x * 0.5
-        }
-        else if f.type == .Big {
+        } else if f.type == .Big {
             c = getColor(Colors["bigfood"], 250)
             size.xy = cellSize.x * 0.7
         }
@@ -305,19 +302,18 @@ draw :: proc() {
 
     /* Draw Title */
     c = getColor(Colors["text"])
-    font := rl.LoadFont("./fonts/8bitOperatorPlus8-Regular.ttf")
 
     fSize :f32= 25
 
     text :cstring= "Snake!"
-    fontSize := f32(font.baseSize) * 1.2
+    fontSize := f32(fontBold.baseSize) * 1.7
     spacing :f32= 3
-    textSizeVec2 := rl.MeasureTextEx(font, text, fontSize, spacing)
+    textSizeVec2 := rl.MeasureTextEx(fontBold, text, fontSize, spacing)
     pos := rl.Vector2 {
         f32(W_WIDTH) / 2.0 - textSizeVec2.x / 2.0,
         gridPos.y/2 - textSizeVec2.y/2,
     }
-    rl.DrawTextEx(font, text, pos, fontSize, spacing ,c)
+    rl.DrawTextEx(fontBold, text, pos, fontSize, spacing ,c)
 
     /* Draw Score */
     buf :[256]byte={}
@@ -327,7 +323,7 @@ draw :: proc() {
     )
     defer delete(str)
     text = strings.clone_to_cstring(str)
-    fontSize = f32(font.baseSize) * 0.7
+    fontSize = f32(font.baseSize) * 1.2
     spacing = 0
     textSizeVec2 = rl.MeasureTextEx(font, text, fontSize, spacing)
     pos = rl.Vector2 {
@@ -340,14 +336,13 @@ draw :: proc() {
 }
 
 drawInfoBox :: proc(header: string, text: string) {
-    font := rl.LoadFont("./fonts/8bitOperatorPlus8-Regular.ttf")
 
     h := strings.clone_to_cstring(header)
-    hFontSize := f32(font.baseSize) * 1
-    headerSize:= rl.MeasureTextEx(font, h, hFontSize, 0)
+    hFontSize := f32(fontBold.baseSize) * 1.5
+    headerSize:= rl.MeasureTextEx(fontBold, h, hFontSize, 0)
 
     t := strings.clone_to_cstring(text)
-    tFontSize := f32(font.baseSize) * 0.4
+    tFontSize := f32(font.baseSize) * 0.8
     textSize := rl.MeasureTextEx(font, t, tFontSize, 0)
     textPadding :f32= 10
 
@@ -367,14 +362,12 @@ drawInfoBox :: proc(header: string, text: string) {
     ibPadding :i32= 20
     ibW: i32 = i32(textWidth) + ibPadding
     ibH: i32 = i32(textSize.y + headerSize.y + textPadding) + ibPadding
-    fmt.println("Info box Height ", ibH)
-    fmt.println("Text Height", i32(textSize.y + headerSize.y + textPadding))
     ibX: i32 = W_WIDTH/2 - ibW/2
     ibY: i32 = W_HEIGHT/2 - ibH/2
 
     rl.DrawRectangle(ibX, ibY, ibW, ibH, c)
 
     c = getColor(Colors["text"])
-    rl.DrawTextEx(font, h, headerPos, hFontSize, 0, c)
+    rl.DrawTextEx(fontBold, h, headerPos, hFontSize, 0, c)
     rl.DrawTextEx(font, t, textPos, tFontSize, 0, c)
 }
