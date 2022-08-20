@@ -12,12 +12,15 @@ import rand "core:math/rand"
 FPS :: 60
 GAME_SPEED :u8: 10
 W_WIDTH, W_HEIGHT :: 800, 600
-CELL_COLUMNS, CELL_ROWS :: 30, 20
+CELL_COLUMNS, CELL_ROWS :: 15, 8
 CELLS :: CELL_COLUMNS * CELL_ROWS
 
 Direction :: enum{Up, Left, Down, Right}
 State :: enum {Running, Paused, Death, Quit}
 Foods :: enum {Small, Big, Super}
+Entiti :: enum {Empty, Snake, Food}
+
+Cells :: map [[2]i32] Entiti
 
 Snake :: struct {
     body: [dynamic][2]i32,
@@ -29,6 +32,7 @@ Food :: struct {
     pos: [2]i32,
     type: Foods,
 }
+
 
 Colors := map[string]u32{
     "windowbg"   = 0x1F1F28,
@@ -51,7 +55,7 @@ Rgb :: struct {
     a : u8,
 }
 
-cells :   [CELLS][2]i32
+cells: Cells
 cellSize: rl.Vector2
 gridPos:  rl.Vector2
 gridSize: [2]i32
@@ -59,7 +63,7 @@ font, fontBold : rl.Font
 
 score:     int
 snake:     Snake
-food:      [dynamic]Food
+foods:      [dynamic]Food
 timeAcc:   f32
 eatenAcc:  u16
 gameState: State
@@ -95,7 +99,7 @@ initGame :: proc() {
     scoreMultiplier = math.sqrt(f32(GAME_SPEED))
     font = rl.LoadFont("./fonts/8bitOperatorPlus-Regular.ttf")
     fontBold = rl.LoadFont("./fonts/8bitOperatorPlus-Bold.ttf")
-    /* Init Snake */
+
     snake.body = {}
     snake.direction = Direction.Right
     startPos: [2]i32 = {CELL_COLUMNS / 2 , CELL_ROWS / 2}
@@ -103,9 +107,22 @@ initGame :: proc() {
         vec : [2]i32 = {startPos.x - i32(i), startPos.y}
         append(&snake.body, vec)
     }
-    /* Init Food */
-    food = {}
-    append(&food, getFood(.Small))
+
+    for x:i32=0; x < CELL_COLUMNS; x+=1 {
+        for y:i32=0; y < CELL_COLUMNS; y+=1 {
+            cells[{x,y}]=.Empty
+        }
+    }
+    for part in snake.body {
+        cells[part]=.Snake 
+    }
+
+    foods = {}
+    append(&foods, getFood(.Small))
+
+    for food in foods {
+        cells[food.pos]=.Food 
+    }
 }
 
 updateGame :: proc() {
@@ -171,32 +188,35 @@ updateGame :: proc() {
         lastI := len(snake.body) - 1
         if snake.eaten == true {
             append(&snake.body, snake.body[lastI])
+            cells[snake.body[lastI]]=.Snake
             snake.eaten = false
         }
         for i := lastI; i > 0; i-=1 {
             snake.body[i] = snake.body[i-1]
+            cells[snake.body[lastI]]=.Empty
         }
         snake.body[0] = nextPos
+        cells[snake.body[0]]=.Snake
         timeAcc -= moveSpeed
     }
 
     /* Handle Fruit */
-    for i := 0; i < len(food); i += 1 {
-        if snake.body[0] == food[i].pos {
-            if food[i].type == .Small {
+    for i := 0; i < len(foods); i += 1 {
+        if snake.body[0] == foods[i].pos {
+            if foods[i].type == .Small {
                 score += int(math.round(1.0 * scoreMultiplier))
                 eatenAcc += 1
-                append(&food, getFood(.Small))
-            } else if food[i].type == .Big {
+                append(&foods, getFood(.Small))
+            } else if foods[i].type == .Big {
                 score += int(math.round(3.0 * scoreMultiplier))
                 eatenAcc += 1
             }
-            unordered_remove(&food, i)
+            unordered_remove(&foods, i)
             snake.eaten = true
         } 
     }
     if snake.eaten == true && eatenAcc % 5 == 0 {
-        append(&food, getFood(.Big))
+        append(&foods, getFood(.Big))
         snake.eaten = false
     }
     timeAcc += rl.GetFrameTime()
@@ -212,20 +232,19 @@ collision :: proc(nextPos: [2]i32) -> (collision: bool) {
 
 getFood :: proc(type: Foods) -> Food {
     rng := rand.create(u64(time.to_unix_nanoseconds(time.now())))
-    pos :[2]i32= {
-        i32(rand.float32_range(0, CELL_COLUMNS - 1, &rng)),
-        i32(rand.float32_range(0, CELL_ROWS - 1, &rng)),
+    for {
+        pos :[2]i32= {
+            i32(rand.float32_range(0, CELL_COLUMNS - 1, &rng)),
+            i32(rand.float32_range(0, CELL_ROWS - 1, &rng)),
+        }
+        if cells[pos] == .Empty do return {pos, type}
     }
-    if collision(pos) {
-        getFood(type)
-    } 
-    return {pos, type}
 }
 
 getColor :: proc(color: u32, alpha:u8= 255) -> rl.Color {
-    red := u8(color >> (2*8) & 0xFF)
+    red   := u8(color >> (2*8) & 0xFF)
     green := u8(color >> (1*8) & 0xFF)
-    blue := u8(color >> (0*8) & 0xFF)
+    blue  := u8(color >> (0*8) & 0xFF)
     return {red, green, blue, alpha}
 }
 
@@ -285,7 +304,7 @@ draw :: proc() {
     }
 
     /* Draw Food */
-    for f in food {
+    for f in foods {
         pos := posToPixel(f.pos)
         size: rl.Vector2
         if f.type == .Small {
