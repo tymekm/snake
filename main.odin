@@ -1,4 +1,4 @@
-package main
+package snake
 
 import "core:time"
 import "core:fmt"
@@ -12,26 +12,30 @@ import rand "core:math/rand"
 FPS :: 60
 GAME_SPEED :u8: 10
 W_WIDTH, W_HEIGHT :: 800, 600
-CELL_COLUMNS, CELL_ROWS :: 15, 8
+CELL_COLUMNS, CELL_ROWS :: 20, 10
+FOOD_TIMER :: i32(CELL_ROWS * CELL_COLUMNS * .2)
 CELLS :: CELL_COLUMNS * CELL_ROWS
 
-Direction :: enum{Up, Left, Down, Right}
-State :: enum {Running, Paused, Death, Quit}
-Foods :: enum {Small, Big, Super}
-Entiti :: enum {Empty, Snake, Food}
-
-Cells :: map [[2]i32] Entiti
+GameState :: enum {Running, Paused, Death, Quit}
+CellState :: enum {Empty, Snake, Food}
 
 Snake :: struct {
     body: [dynamic][2]i32,
     direction: Direction,
     eaten: bool,
+    nextPos: [2]i32,
+    moved: bool,
 }
+Direction :: enum{Up, Left, Down, Right}
 
 Food :: struct {
     pos: [2]i32,
     type: Foods,
+    timer: i32,
+    opacity: u8,
+    flashing: bool
 }
+Foods :: enum {Small, Big, Super}
 
 
 Colors := map[string]u32{
@@ -55,7 +59,6 @@ Rgb :: struct {
     a : u8,
 }
 
-cells: Cells
 cellSize: rl.Vector2
 gridPos:  rl.Vector2
 gridSize: [2]i32
@@ -66,7 +69,7 @@ snake:     Snake
 foods:      [dynamic]Food
 timeAcc:   f32
 eatenAcc:  u16
-gameState: State
+gameState: GameState
 moveSpeed: f32
 scoreMultiplier: f32
 
@@ -85,7 +88,7 @@ main :: proc() {
 }
 
 initGame :: proc() {
-    gameState = State.Running
+    gameState = .Running
     /* Init Grid */
     size := f32(la.round(W_WIDTH * 0.8 / CELL_COLUMNS))
     cellSize.xy = size
@@ -96,7 +99,7 @@ initGame :: proc() {
 
     score = 0
     moveSpeed = 1 / f32(GAME_SPEED)
-    scoreMultiplier = math.sqrt(f32(GAME_SPEED))
+    scoreMultiplier = math.pow(f32(GAME_SPEED), 1.5)
     font = rl.LoadFont("./fonts/8bitOperatorPlus-Regular.ttf")
     fontBold = rl.LoadFont("./fonts/8bitOperatorPlus-Bold.ttf")
 
@@ -108,21 +111,8 @@ initGame :: proc() {
         append(&snake.body, vec)
     }
 
-    for x:i32=0; x < CELL_COLUMNS; x+=1 {
-        for y:i32=0; y < CELL_COLUMNS; y+=1 {
-            cells[{x,y}]=.Empty
-        }
-    }
-    for part in snake.body {
-        cells[part]=.Snake 
-    }
-
     foods = {}
     append(&foods, getFood(.Small))
-
-    for food in foods {
-        cells[food.pos]=.Food 
-    }
 }
 
 updateGame :: proc() {
@@ -177,9 +167,10 @@ updateGame :: proc() {
     }
 
     if nextPos == snake.body[1] do return
+    snake.nextPos = nextPos
     snake.direction = nextDir
 
-    if collision(nextPos) {
+    if isOccupied(snake.nextPos) == .Snake {
         gameState = .Death 
         return
     } 
@@ -188,56 +179,79 @@ updateGame :: proc() {
         lastI := len(snake.body) - 1
         if snake.eaten == true {
             append(&snake.body, snake.body[lastI])
-            cells[snake.body[lastI]]=.Snake
             snake.eaten = false
         }
         for i := lastI; i > 0; i-=1 {
             snake.body[i] = snake.body[i-1]
-            cells[snake.body[lastI]]=.Empty
         }
-        snake.body[0] = nextPos
-        cells[snake.body[0]]=.Snake
+        snake.body[0] = snake.nextPos
         timeAcc -= moveSpeed
+        snake.moved = true
     }
 
     /* Handle Fruit */
-    for i := 0; i < len(foods); i += 1 {
-        if snake.body[0] == foods[i].pos {
-            if foods[i].type == .Small {
+    for food, it in &foods {
+        if snake.body[0] == food.pos {
+            if food.type == .Small {
                 score += int(math.round(1.0 * scoreMultiplier))
                 eatenAcc += 1
                 append(&foods, getFood(.Small))
-            } else if foods[i].type == .Big {
+            } else if food.type == .Big {
                 score += int(math.round(3.0 * scoreMultiplier))
                 eatenAcc += 1
             }
-            unordered_remove(&foods, i)
+            unordered_remove(&foods, it)
             snake.eaten = true
         } 
+        if food.type == .Big {
+            if snake.moved {
+                food.timer -= 1
+                if food.timer == i32(math.floor(f32(FOOD_TIMER) * .3)) {
+                    food.flashing = true
+                } 
+            } 
+            if food.timer == 0 do unordered_remove(&foods, it)
+            else if food.flashing == true {
+                food.opacity += 10
+            }
+        }
+
     }
+    timeAcc += rl.GetFrameTime()
     if snake.eaten == true && eatenAcc % 5 == 0 {
         append(&foods, getFood(.Big))
         snake.eaten = false
     }
-    timeAcc += rl.GetFrameTime()
+
+    for food, it in &foods {
+    }
+    snake.moved = false
 }
 
-
-collision :: proc(nextPos: [2]i32) -> (collision: bool) {
-    for occupied in snake.body {
-        if nextPos == occupied do return true 
+isOccupied :: proc(pos: [2]i32) -> CellState {
+    for part in snake.body {
+        if pos == part do return .Snake
+    }
+    for food in foods {
+        if pos == food.pos do return .Food
     } 
-    return false
+    return .Empty
 }
 
 getFood :: proc(type: Foods) -> Food {
     rng := rand.create(u64(time.to_unix_nanoseconds(time.now())))
     for {
         pos :[2]i32= {
-            i32(rand.float32_range(0, CELL_COLUMNS - 1, &rng)),
-            i32(rand.float32_range(0, CELL_ROWS - 1, &rng)),
+            i32(rand.float32_range(0, CELL_COLUMNS, &rng)),
+            i32(rand.float32_range(0, CELL_ROWS, &rng)),
         }
-        if cells[pos] == .Empty do return {pos, type}
+        if isOccupied(pos) == .Empty {
+            if type == .Small do return {pos, type, -1, 255, false}
+            if type == .Big do return {pos, type, 
+                FOOD_TIMER,
+                255, false
+            }
+        } 
     }
 }
 
@@ -308,11 +322,11 @@ draw :: proc() {
         pos := posToPixel(f.pos)
         size: rl.Vector2
         if f.type == .Small {
-            c = getColor(Colors["smallfood"], 250)
-            size.xy = cellSize.x * 0.5
+            c = getColor(Colors["smallfood"], f.opacity)
+            size.xy = cellSize.x * 0.4
         } else if f.type == .Big {
-            c = getColor(Colors["bigfood"], 250)
-            size.xy = cellSize.x * 0.7
+            c = getColor(Colors["bigfood"], f.opacity)
+            size.xy = cellSize.x * 0.6
         }
         pos.x += (cellSize.x - size.x) / 2
         pos.y += (cellSize.y - size.y) / 2 + 1
@@ -338,7 +352,7 @@ draw :: proc() {
     buf :[256]byte={}
     str := strings.join({
         "Score", strconv.itoa(buf[:], score)},
-        ": "
+        ": ",
     )
     defer delete(str)
     text = strings.clone_to_cstring(str)
