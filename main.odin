@@ -11,7 +11,8 @@ import rand "core:math/rand"
 
 FPS :: 60
 GAME_SPEED :u8: 10
-W_WIDTH, W_HEIGHT :: 800, 600
+/* W_WIDTH, W_HEIGHT :: 800, 600 */
+W_WIDTH, W_HEIGHT :: 1280, 1024
 CELL_COLUMNS, CELL_ROWS :: 20, 10
 CELLS :: CELL_COLUMNS * CELL_ROWS
 FOOD_TIMER :: i32(CELLS * .2)
@@ -30,11 +31,11 @@ Direction :: enum{Up, Left, Down, Right}
 
 Fruit :: struct {
     pos: [2]i32,
-    type: Fruits,
+    type: FruitsTypes,
     timer: i32,
     opacity: u8,
 }
-Fruits :: enum {Apple, Mango, Box}
+FruitsTypes :: enum {Apple, Mango, Box}
 
 
 Colors := map[string]u32{
@@ -60,10 +61,11 @@ gridSize: [2]i32
 font, fontBold : rl.Font
 apple: rl.Texture
 mango: rl.Texture
+box: rl.Texture
 
 score:     int
 snake:     Snake
-fruits:      [dynamic]Fruit
+fruits:    [dynamic]Fruit
 timeAcc:   f32
 eatenAcc:  u8
 gameState: GameState
@@ -106,6 +108,9 @@ initGame :: proc() {
     mangoImg := rl.LoadImage("./textures/mango.png")
     rl.ImageResize(&mangoImg, i32(cellSize.x * 0.8), i32(cellSize.y * 0.8))
     mango = rl.LoadTextureFromImage(mangoImg)
+    boxImg := rl.LoadImage("./textures/box.png")
+    rl.ImageResize(&boxImg, i32(cellSize.x), i32(cellSize.y))
+    box = rl.LoadTextureFromImage(boxImg)
 
     snake.body = {}
     snake.direction = Direction.Right
@@ -203,7 +208,8 @@ updateGame :: proc() {
             } else if fruit.type == .Mango {
                 score += int(math.round(3.0 * scoreMultiplier))
                 eatenAcc += 1
-            }
+            }else if fruit.type == .Box do openBox()
+
             unordered_remove(&fruits, it)
             snake.eaten = true
         } 
@@ -238,7 +244,7 @@ isOccupied :: proc(pos: [2]i32) -> CellState {
     return .Empty
 }
 
-getFruit :: proc(type: Fruits) -> Fruit {
+getFruit :: proc(type: FruitsTypes) -> Fruit {
     rng := rand.create(u64(time.to_unix_nanoseconds(time.now())))
     for {
         pos :[2]i32= {
@@ -247,18 +253,27 @@ getFruit :: proc(type: Fruits) -> Fruit {
         }
         if isOccupied(pos) == .Empty {
             if type == .Apple do return {pos, type, -1, 255}
-            if type == .Mango do return {pos, type, 
-                FOOD_TIMER,
-                255
+            if type == .Mango {
+                if i32(rand.float32_range(0, 4, &rng)) == 0 {
+                    return {pos, .Box, FOOD_TIMER, 255} 
+                }
+                else do return {pos, .Mango, FOOD_TIMER, 255}
             }
         } 
     }
 }
 
-/* openBox :: proc () -> [5]Fruits { */
-/*     fruits */
-/* } */
-/**/
+openBox :: proc () {
+    rng := rand.create(u64(time.to_unix_nanoseconds(time.now())))
+    for i in 0..=5 {
+        if i32(rand.float32_range(0, 4, &rng)) == 0 {
+            num := rand.float32_range(0, 10, &rng)
+            if num >= 8 do append(&fruits, getFruit(.Mango))
+            else do append(&fruits, getFruit(.Apple))
+        }
+    }
+}
+
 getColor :: proc(color: u32, alpha:u8= 255) -> rl.Color {
     red   := u8(color >> (2*8) & 0xFF)
     green := u8(color >> (1*8) & 0xFF)
@@ -325,7 +340,7 @@ draw :: proc() {
     for f in fruits {
         pos := posToPixel(f.pos)
         size: rl.Vector2
-        if f.type == .Apple {
+        if f.type == .Box {
             c = getColor(Colors["white"], f.opacity)
             rl.DrawTexture(apple,
             i32(pos.x + cellSize.x/2 - f32(apple.width)/2),
@@ -337,6 +352,13 @@ draw :: proc() {
             rl.DrawTexture(mango,
             i32(pos.x + cellSize.x/2 - f32(mango.width)/2),
             i32(pos.y + cellSize.y/2 - f32(mango.width)/2),
+            c
+            )
+        } else if f.type == .Box {
+            c = getColor(Colors["white"], f.opacity)
+            rl.DrawTexture(box,
+            i32(pos.x + cellSize.x/2 - f32(box.width)/2),
+            i32(pos.y + cellSize.y/2 - f32(box.width)/2),
             c
             )
         }
