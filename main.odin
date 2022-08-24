@@ -213,7 +213,7 @@ updateGame :: proc() {
             unordered_remove(&fruits, it)
             snake.eaten = true
         } 
-        if fruit.type == .Mango {
+        if fruit.type == .Mango || fruit.type == .Box {
             if snake.moved {
                 fruit.timer -= 1
             } 
@@ -340,7 +340,7 @@ draw :: proc() {
     for f in fruits {
         pos := posToPixel(f.pos)
         size: rl.Vector2
-        if f.type == .Box {
+        if f.type == .Apple {
             c = getColor(Colors["white"], f.opacity)
             rl.DrawTexture(apple,
             i32(pos.x + cellSize.x/2 - f32(apple.width)/2),
