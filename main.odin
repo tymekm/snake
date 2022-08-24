@@ -13,11 +13,11 @@ FPS :: 60
 GAME_SPEED :u8: 10
 W_WIDTH, W_HEIGHT :: 800, 600
 CELL_COLUMNS, CELL_ROWS :: 20, 10
-FOOD_TIMER :: i32(CELL_ROWS * CELL_COLUMNS * .2)
 CELLS :: CELL_COLUMNS * CELL_ROWS
+FOOD_TIMER :: i32(CELLS * .2)
 
 GameState :: enum {Running, Paused, Death, Quit}
-CellState :: enum {Empty, Snake, Food}
+CellState :: enum {Empty, Snake, Fruit}
 
 Snake :: struct {
     body: [dynamic][2]i32,
@@ -28,14 +28,13 @@ Snake :: struct {
 }
 Direction :: enum{Up, Left, Down, Right}
 
-Food :: struct {
+Fruit :: struct {
     pos: [2]i32,
-    type: Foods,
+    type: Fruits,
     timer: i32,
     opacity: u8,
-    flashing: bool
 }
-Foods :: enum {Small, Big, Super}
+Fruits :: enum {Apple, Mango, Box}
 
 
 Colors := map[string]u32{
@@ -47,28 +46,26 @@ Colors := map[string]u32{
     "text"       = 0xDCD7BA,
     "snake"      = 0x7E9CD8,
     "snakedead"  = 0xE82424,
-    "smallfood"  = 0xC34043,
-    "bigfood"    = 0x98BB6C,
-    "superfood"  = 0x957FB8,
+    "white"  = 0xFFFFFF,
 }
 
 Rgb :: struct {
-    r : u8,
-    g : u8,
-    b : u8,
-    a : u8,
+    r, g, b, a, : u8
 }
 
 cellSize: rl.Vector2
 gridPos:  rl.Vector2
 gridSize: [2]i32
+
 font, fontBold : rl.Font
+apple: rl.Texture
+mango: rl.Texture
 
 score:     int
 snake:     Snake
-foods:      [dynamic]Food
+fruits:      [dynamic]Fruit
 timeAcc:   f32
-eatenAcc:  u16
+eatenAcc:  u8
 gameState: GameState
 moveSpeed: f32
 scoreMultiplier: f32
@@ -103,6 +100,13 @@ initGame :: proc() {
     font = rl.LoadFont("./fonts/8bitOperatorPlus-Regular.ttf")
     fontBold = rl.LoadFont("./fonts/8bitOperatorPlus-Bold.ttf")
 
+    appleImg := rl.LoadImage("./textures/apple.png")
+    rl.ImageResize(&appleImg, i32(cellSize.x * 0.6), i32(cellSize.y * 0.6))
+    apple = rl.LoadTextureFromImage(appleImg)
+    mangoImg := rl.LoadImage("./textures/mango.png")
+    rl.ImageResize(&mangoImg, i32(cellSize.x * 0.8), i32(cellSize.y * 0.8))
+    mango = rl.LoadTextureFromImage(mangoImg)
+
     snake.body = {}
     snake.direction = Direction.Right
     startPos: [2]i32 = {CELL_COLUMNS / 2 , CELL_ROWS / 2}
@@ -111,8 +115,8 @@ initGame :: proc() {
         append(&snake.body, vec)
     }
 
-    foods = {}
-    append(&foods, getFood(.Small))
+    fruits = {}
+    append(&fruits, getFruit(.Apple))
 }
 
 updateGame :: proc() {
@@ -190,40 +194,36 @@ updateGame :: proc() {
     }
 
     /* Handle Fruit */
-    for food, it in &foods {
-        if snake.body[0] == food.pos {
-            if food.type == .Small {
+    for fruit, it in &fruits {
+        if snake.body[0] == fruit.pos {
+            if fruit.type == .Apple {
                 score += int(math.round(1.0 * scoreMultiplier))
                 eatenAcc += 1
-                append(&foods, getFood(.Small))
-            } else if food.type == .Big {
+                append(&fruits, getFruit(.Apple))
+            } else if fruit.type == .Mango {
                 score += int(math.round(3.0 * scoreMultiplier))
                 eatenAcc += 1
             }
-            unordered_remove(&foods, it)
+            unordered_remove(&fruits, it)
             snake.eaten = true
         } 
-        if food.type == .Big {
+        if fruit.type == .Mango {
             if snake.moved {
-                food.timer -= 1
-                if food.timer == i32(math.floor(f32(FOOD_TIMER) * .3)) {
-                    food.flashing = true
-                } 
+                fruit.timer -= 1
             } 
-            if food.timer == 0 do unordered_remove(&foods, it)
-            else if food.flashing == true {
-                food.opacity += 10
-            }
+            if fruit.timer == 0 do unordered_remove(&fruits, it)
+            else if fruit.timer <= i32(math.floor(f32(FOOD_TIMER) * .3)) {
+                fruit.opacity += 15
+            } 
         }
-
     }
     timeAcc += rl.GetFrameTime()
     if snake.eaten == true && eatenAcc % 5 == 0 {
-        append(&foods, getFood(.Big))
+        append(&fruits, getFruit(.Mango))
         snake.eaten = false
     }
 
-    for food, it in &foods {
+    for fruit, it in &fruits {
     }
     snake.moved = false
 }
@@ -232,13 +232,13 @@ isOccupied :: proc(pos: [2]i32) -> CellState {
     for part in snake.body {
         if pos == part do return .Snake
     }
-    for food in foods {
-        if pos == food.pos do return .Food
+    for fruit in fruits {
+        if pos == fruit.pos do return .Fruit
     } 
     return .Empty
 }
 
-getFood :: proc(type: Foods) -> Food {
+getFruit :: proc(type: Fruits) -> Fruit {
     rng := rand.create(u64(time.to_unix_nanoseconds(time.now())))
     for {
         pos :[2]i32= {
@@ -246,15 +246,19 @@ getFood :: proc(type: Foods) -> Food {
             i32(rand.float32_range(0, CELL_ROWS, &rng)),
         }
         if isOccupied(pos) == .Empty {
-            if type == .Small do return {pos, type, -1, 255, false}
-            if type == .Big do return {pos, type, 
+            if type == .Apple do return {pos, type, -1, 255}
+            if type == .Mango do return {pos, type, 
                 FOOD_TIMER,
-                255, false
+                255
             }
         } 
     }
 }
 
+/* openBox :: proc () -> [5]Fruits { */
+/*     fruits */
+/* } */
+/**/
 getColor :: proc(color: u32, alpha:u8= 255) -> rl.Color {
     red   := u8(color >> (2*8) & 0xFF)
     green := u8(color >> (1*8) & 0xFF)
@@ -317,20 +321,25 @@ draw :: proc() {
         rl.DrawRectangleV(vec2, cellSize, c)
     }
 
-    /* Draw Food */
-    for f in foods {
+    /* Draw Fruit */
+    for f in fruits {
         pos := posToPixel(f.pos)
         size: rl.Vector2
-        if f.type == .Small {
-            c = getColor(Colors["smallfood"], f.opacity)
-            size.xy = cellSize.x * 0.4
-        } else if f.type == .Big {
-            c = getColor(Colors["bigfood"], f.opacity)
-            size.xy = cellSize.x * 0.6
+        if f.type == .Apple {
+            c = getColor(Colors["white"], f.opacity)
+            rl.DrawTexture(apple,
+            i32(pos.x + cellSize.x/2 - f32(apple.width)/2),
+            i32(pos.y + cellSize.y/2 - f32(apple.width)/2),
+            c
+            )
+        } else if f.type == .Mango {
+            c = getColor(Colors["white"], f.opacity)
+            rl.DrawTexture(mango,
+            i32(pos.x + cellSize.x/2 - f32(mango.width)/2),
+            i32(pos.y + cellSize.y/2 - f32(mango.width)/2),
+            c
+            )
         }
-        pos.x += (cellSize.x - size.x) / 2
-        pos.y += (cellSize.y - size.y) / 2 + 1
-        rl.DrawRectangleV(pos, size, c)
     }
 
     /* Draw Title */
