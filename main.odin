@@ -11,8 +11,8 @@ import rand "core:math/rand"
 
 FPS :: 60
 GAME_SPEED :u8: 10
-/* W_WIDTH, W_HEIGHT :: 800, 600 */
-W_WIDTH, W_HEIGHT :: 1280, 1024
+W_WIDTH, W_HEIGHT :: 800, 600
+/* W_WIDTH, W_HEIGHT :: 1280, 1024 */
 CELL_COLUMNS, CELL_ROWS :: 20, 10
 CELLS :: CELL_COLUMNS * CELL_ROWS
 FOOD_TIMER :: i32(CELLS * .2)
@@ -58,16 +58,17 @@ cellSize: rl.Vector2
 gridPos:  rl.Vector2
 gridSize: [2]i32
 
+rng : rand.Rand
 font, fontBold : rl.Font
 apple: rl.Texture
 mango: rl.Texture
 box: rl.Texture
+snakebody: rl.Texture
 
 score:     int
 snake:     Snake
 fruits:    [dynamic]Fruit
 timeAcc:   f32
-eatenAcc:  u8
 gameState: GameState
 moveSpeed: f32
 scoreMultiplier: f32
@@ -96,6 +97,7 @@ initGame :: proc() {
     gridPos.x   = f32((W_WIDTH  - gridSize.x) / 2)
     gridPos.y   = f32((W_HEIGHT  - gridSize.y) / 2)
 
+    rng = rand.create(u64(time.to_unix_nanoseconds(time.now())))
     score = 0
     moveSpeed = 1 / f32(GAME_SPEED)
     scoreMultiplier = math.pow(f32(GAME_SPEED), 1.5)
@@ -109,8 +111,11 @@ initGame :: proc() {
     rl.ImageResize(&mangoImg, i32(cellSize.x * 0.8), i32(cellSize.y * 0.8))
     mango = rl.LoadTextureFromImage(mangoImg)
     boxImg := rl.LoadImage("./textures/box.png")
-    rl.ImageResize(&boxImg, i32(cellSize.x), i32(cellSize.y))
+    rl.ImageResize(&boxImg, i32(cellSize.x * 1.1), i32(cellSize.y * 1.1))
     box = rl.LoadTextureFromImage(boxImg)
+    snakebodyImg := rl.LoadImage("./textures/snake-body.png")
+    rl.ImageResize(&snakebodyImg, i32(cellSize.x), i32(cellSize.y))
+    snakebody = rl.LoadTextureFromImage(snakebodyImg)
 
     snake.body = {}
     snake.direction = Direction.Right
@@ -201,37 +206,38 @@ updateGame :: proc() {
     /* Handle Fruit */
     for fruit, it in &fruits {
         if snake.body[0] == fruit.pos {
+            if fruit.type != .Box do snake.eaten = true
+
             if fruit.type == .Apple {
                 score += int(math.round(1.0 * scoreMultiplier))
-                eatenAcc += 1
-                append(&fruits, getFruit(.Apple))
             } else if fruit.type == .Mango {
                 score += int(math.round(3.0 * scoreMultiplier))
-                eatenAcc += 1
-            }else if fruit.type == .Box do openBox()
+            } else if fruit.type == .Box do openBox()
 
             unordered_remove(&fruits, it)
-            snake.eaten = true
         } 
-        if fruit.type == .Mango || fruit.type == .Box {
-            if snake.moved {
-                fruit.timer -= 1
-            } 
+        if fruit.type != .Apple {
+            if snake.moved do fruit.timer -= 1
             if fruit.timer == 0 do unordered_remove(&fruits, it)
             else if fruit.timer <= i32(math.floor(f32(FOOD_TIMER) * .3)) {
                 fruit.opacity += 15
             } 
         }
     }
-    timeAcc += rl.GetFrameTime()
-    if snake.eaten == true && eatenAcc % 5 == 0 {
-        append(&fruits, getFruit(.Mango))
-        snake.eaten = false
+    eatable := 0
+    for fruit in fruits {
+        if fruit.type != .Box do eatable += 1 
     }
-
-    for fruit, it in &fruits {
+    if eatable == 0 {
+        randNum := getRandNum(1,10) 
+        fruit : Fruit
+        if randNum <= 7 do fruit = getFruit(.Apple)
+        else if randNum <= 8  do fruit = getFruit(.Mango)
+        else do fruit = getFruit(.Box)
+        append(&fruits, fruit)
     }
     snake.moved = false
+    timeAcc += rl.GetFrameTime()
 }
 
 isOccupied :: proc(pos: [2]i32) -> CellState {
@@ -244,33 +250,32 @@ isOccupied :: proc(pos: [2]i32) -> CellState {
     return .Empty
 }
 
+openBox :: proc () {
+    foodSpawned:=false
+    for i in 0..=5 {
+        if getRandNum(0,4) == 0 {
+            if getRandNum(0,10) >= 8 do append(&fruits, getFruit(.Mango))
+            else do append(&fruits, getFruit(.Apple))
+            foodSpawned = true
+        }
+    }
+    if foodSpawned == false do append(&fruits, getFruit(.Apple))
+}
+
+getRandNum :: proc(low: int, high: int) -> i32 {
+    return i32(rand.float32_range(f32(low), f32(high), &rng))
+}
+
 getFruit :: proc(type: FruitsTypes) -> Fruit {
-    rng := rand.create(u64(time.to_unix_nanoseconds(time.now())))
     for {
         pos :[2]i32= {
-            i32(rand.float32_range(0, CELL_COLUMNS, &rng)),
-            i32(rand.float32_range(0, CELL_ROWS, &rng)),
+            getRandNum(0, CELL_COLUMNS),
+            getRandNum(0, CELL_ROWS),
         }
         if isOccupied(pos) == .Empty {
             if type == .Apple do return {pos, type, -1, 255}
-            if type == .Mango {
-                if i32(rand.float32_range(0, 4, &rng)) == 0 {
-                    return {pos, .Box, FOOD_TIMER, 255} 
-                }
-                else do return {pos, .Mango, FOOD_TIMER, 255}
-            }
+            else do return {pos, type, FOOD_TIMER, 255}
         } 
-    }
-}
-
-openBox :: proc () {
-    rng := rand.create(u64(time.to_unix_nanoseconds(time.now())))
-    for i in 0..=5 {
-        if i32(rand.float32_range(0, 4, &rng)) == 0 {
-            num := rand.float32_range(0, 10, &rng)
-            if num >= 8 do append(&fruits, getFruit(.Mango))
-            else do append(&fruits, getFruit(.Apple))
-        }
     }
 }
 
@@ -397,6 +402,8 @@ draw :: proc() {
     rl.DrawTextEx(font, text, pos, fontSize, spacing ,c)
     if gameState == .Paused do drawInfoBox("Paused", "Press 'P' to continue")
     if gameState == .Death do drawInfoBox("GameOver!", "Press 'Enter' to play again or 'Q' to quit")
+    rl.DrawTexture(snakebody, 10, 50, rl.WHITE)
+    rl.DrawTexture(snakebody, 10 + snakebody.width, 50, rl.WHITE)
 }
 
 drawInfoBox :: proc(header: string, text: string) {
