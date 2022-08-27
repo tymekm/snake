@@ -11,8 +11,8 @@ import rand "core:math/rand"
 
 FPS :: 60
 GAME_SPEED :u8: 10
-W_WIDTH, W_HEIGHT :: 800, 600
-/* W_WIDTH, W_HEIGHT :: 1280, 1024 */
+/* W_WIDTH, W_HEIGHT :: 800, 600 */
+W_WIDTH, W_HEIGHT :: 1280, 1024
 CELL_COLUMNS, CELL_ROWS :: 20, 10
 CELLS :: CELL_COLUMNS * CELL_ROWS
 FOOD_TIMER :: i32(CELLS * .2)
@@ -27,7 +27,7 @@ Snake :: struct {
     nextPos: [2]i32,
     moved: bool,
 }
-Direction :: enum{Up, Left, Down, Right}
+Direction :: enum{Right, Down, Left, Up}
 
 Fruit :: struct {
     pos: [2]i32,
@@ -64,6 +64,9 @@ apple: rl.Texture
 mango: rl.Texture
 box: rl.Texture
 snakebody: rl.Texture
+snaketail: rl.Texture
+snakehead: rl.Texture
+snakebend: rl.Texture
 
 score:     int
 snake:     Snake
@@ -116,6 +119,15 @@ initGame :: proc() {
     snakebodyImg := rl.LoadImage("./textures/snake-body.png")
     rl.ImageResize(&snakebodyImg, i32(cellSize.x), i32(cellSize.y))
     snakebody = rl.LoadTextureFromImage(snakebodyImg)
+    snaketailImg := rl.LoadImage("./textures/snake-tail.png")
+    rl.ImageResize(&snaketailImg, i32(cellSize.x), i32(cellSize.y))
+    snaketail = rl.LoadTextureFromImage(snaketailImg)
+    snakeheadImg := rl.LoadImage("./textures/snake-head.png")
+    rl.ImageResize(&snakeheadImg, i32(cellSize.x), i32(cellSize.y))
+    snakehead = rl.LoadTextureFromImage(snakeheadImg)
+    snakebendImg := rl.LoadImage("./textures/snake-bend.png")
+    rl.ImageResize(&snakebendImg, i32(cellSize.x), i32(cellSize.y))
+    snakebend = rl.LoadTextureFromImage(snakebendImg)
 
     snake.body = {}
     snake.direction = Direction.Right
@@ -184,11 +196,6 @@ updateGame :: proc() {
     snake.nextPos = nextPos
     snake.direction = nextDir
 
-    if isOccupied(snake.nextPos) == .Snake {
-        gameState = .Death 
-        return
-    } 
-
     if timeAcc >= moveSpeed {
         lastI := len(snake.body) - 1
         if snake.eaten == true {
@@ -198,6 +205,11 @@ updateGame :: proc() {
         for i := lastI; i > 0; i-=1 {
             snake.body[i] = snake.body[i-1]
         }
+        /* Bug here in drawing the head on death */
+        if isOccupied(snake.nextPos) == .Snake {
+            gameState = .Death 
+            return
+        } 
         snake.body[0] = snake.nextPos
         timeAcc -= moveSpeed
         snake.moved = true
@@ -292,6 +304,82 @@ posToPixel :: proc(vec: [2]i32) -> rl.Vector2 {
     return {x, y}
 }
 
+drawSnake :: proc() {
+    using snake
+    c :rl.Color 
+    if gameState == .Death {
+        c = getColor(Colors["snakedead"], 255)
+    } else {
+        c = getColor(Colors["snake"], 255)
+    }
+    for pos, it in body {
+        vec2 := posToPixel(pos)
+        rotation : int
+        if it == 0 {
+            back := normaliseForWrap(body[it], body[it+1])
+            diff := body[it] - back
+            if diff == {1,0} do rotation = 0
+            else if diff == {0,1} do rotation = 90
+            else if diff == {-1,0} do rotation = 180
+            else if diff == {0,-1} do rotation = 270
+            adjustForRotation(&vec2, rotation)
+            rl.DrawTextureEx(snakehead, vec2, f32(rotation), 1, c)
+            continue
+        } 
+        if it == len(body) - 1 {
+            front := normaliseForWrap(body[it], body[it-1])
+            diff := body[it] - front
+            if diff == {-1,0} do rotation = 0
+            else if diff == {0,-1} do rotation = 90
+            else if diff == {1,0} do rotation = 180
+            else if diff == {0,1} do rotation = 270
+            adjustForRotation(&vec2, rotation)
+            rl.DrawTextureEx(snaketail, vec2, f32(rotation), 1, c)
+            continue
+        } 
+        front := normaliseForWrap(body[it], body[it-1])
+        back := normaliseForWrap(body[it], body[it+1])
+        if highAbs(front - back) == 2 {
+            diff := front - back
+            if diff == {2,0} do rotation = 0
+            else if diff == {0,2} do rotation = 90
+            else if diff == {-2,0} do rotation = 180
+            else if diff == {0,-2} do rotation = 270
+            adjustForRotation(&vec2, rotation)
+            rl.DrawTextureEx(snakebody, vec2, f32(rotation), 1, c)
+        } else {
+            diff := (body[it] - front) + (body[it] - back)
+            if diff == {1,1} do rotation = 0
+            else if diff == {-1,1} do rotation = 90
+            else if diff == {-1,-1} do rotation = 180
+            else if diff == {1,-1} do rotation = 270
+            adjustForRotation(&vec2, rotation)
+            rl.DrawTextureEx(snakebend, vec2, f32(rotation), 1, c)
+        }
+    }
+    adjustForRotation :: proc(pos: ^rl.Vector2, rotation: int) {
+        if rotation == 90 do pos.x += cellSize.x
+        else if rotation == 180 { pos.x += cellSize.x; pos.y += cellSize.y}
+        else if rotation == 270 do pos.y += cellSize.y
+    }
+
+    highAbs :: proc(vec2: [2]i32) -> i32 {
+        return abs(vec2.x) > abs(vec2.y) ? abs(vec2.x) : abs(vec2.y)
+    }
+
+    normaliseForWrap :: proc(primary: [2]i32, secondary: [2]i32) -> [2]i32 {
+        normalised: [2]i32 = secondary
+        if abs(normalised.x - primary.x) > 1 {
+            if normalised.x > primary.x do normalised.x -= CELL_COLUMNS
+            else do normalised.x += CELL_COLUMNS
+        } else if abs(normalised.y - primary.y) > 1 {
+            if normalised.y > primary.y do normalised.y -= CELL_ROWS
+            else do normalised.y += CELL_ROWS
+        }
+        return normalised
+    }
+}
+
 draw :: proc() {
     /* Draw Play Field */
     rl.ClearBackground(getColor(Colors["windowbg"]))
@@ -329,18 +417,8 @@ draw :: proc() {
        rl.DrawLineV(posVec2, sizeVec2, outLineC) 
     }
 
-    /* Draw Snake */
+    drawSnake()
     c :rl.Color 
-    if gameState == .Death {
-        c = getColor(Colors["snakedead"], 250)
-    } else {
-        c = getColor(Colors["snake"], 250)
-    }
-    for pos in snake.body {
-        vec2 := posToPixel(pos) 
-        rl.DrawRectangleV(vec2, cellSize, c)
-    }
-
     /* Draw Fruit */
     for f in fruits {
         pos := posToPixel(f.pos)
@@ -402,8 +480,10 @@ draw :: proc() {
     rl.DrawTextEx(font, text, pos, fontSize, spacing ,c)
     if gameState == .Paused do drawInfoBox("Paused", "Press 'P' to continue")
     if gameState == .Death do drawInfoBox("GameOver!", "Press 'Enter' to play again or 'Q' to quit")
-    rl.DrawTexture(snakebody, 10, 50, rl.WHITE)
+    rl.DrawTexture(snaketail, 10, 50, rl.WHITE)
     rl.DrawTexture(snakebody, 10 + snakebody.width, 50, rl.WHITE)
+    rl.DrawTexture(snakebody, 10 + snakebody.width * 2, 50, rl.WHITE)
+    rl.DrawTexture(snakehead, 10 + snakebody.width * 3, 50, rl.WHITE)
 }
 
 drawInfoBox :: proc(header: string, text: string) {
