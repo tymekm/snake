@@ -12,7 +12,7 @@ import rand "core:math/rand"
 FPS :: 60
 GAME_SPEED :u8: 10
 /* W_WIDTH, W_HEIGHT :: 800, 600 */
-W_WIDTH, W_HEIGHT :: 1280, 1024
+W_WIDTH, W_HEIGHT :: 1366, 768
 CELL_COLUMNS, CELL_ROWS :: 20, 10
 CELLS :: CELL_COLUMNS * CELL_ROWS
 FOOD_TIMER :: i32(CELLS * .2)
@@ -217,6 +217,16 @@ updateGame :: proc() {
 
     /* Handle Fruit */
     for fruit, it in &fruits {
+        if fruit.type != .Apple {
+            if snake.moved do fruit.timer -= 1
+            if fruit.timer == 0 { 
+                unordered_remove(&fruits, it)
+                continue
+            }
+            else if fruit.timer <= i32(math.floor(f32(FOOD_TIMER) * .3)) {
+                fruit.opacity += 15
+            } 
+        }
         if snake.body[0] == fruit.pos {
             if fruit.type != .Box do snake.eaten = true
 
@@ -228,13 +238,6 @@ updateGame :: proc() {
 
             unordered_remove(&fruits, it)
         } 
-        if fruit.type != .Apple {
-            if snake.moved do fruit.timer -= 1
-            if fruit.timer == 0 do unordered_remove(&fruits, it)
-            else if fruit.timer <= i32(math.floor(f32(FOOD_TIMER) * .3)) {
-                fruit.opacity += 15
-            } 
-        }
     }
     eatable := 0
     for fruit in fruits {
@@ -310,7 +313,7 @@ drawSnake :: proc() {
     if gameState == .Death {
         c = getColor(Colors["snakedead"], 255)
     } else {
-        c = getColor(Colors["snake"], 255)
+        c = rl.WHITE
     }
     for pos, it in body {
         vec2 := posToPixel(pos)
@@ -480,10 +483,6 @@ draw :: proc() {
     rl.DrawTextEx(font, text, pos, fontSize, spacing ,c)
     if gameState == .Paused do drawInfoBox("Paused", "Press 'P' to continue")
     if gameState == .Death do drawInfoBox("GameOver!", "Press 'Enter' to play again or 'Q' to quit")
-    rl.DrawTexture(snaketail, 10, 50, rl.WHITE)
-    rl.DrawTexture(snakebody, 10 + snakebody.width, 50, rl.WHITE)
-    rl.DrawTexture(snakebody, 10 + snakebody.width * 2, 50, rl.WHITE)
-    rl.DrawTexture(snakehead, 10 + snakebody.width * 3, 50, rl.WHITE)
 }
 
 drawInfoBox :: proc(header: string, text: string) {
