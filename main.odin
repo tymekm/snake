@@ -69,6 +69,24 @@ moveSpeed: f32
 scoreMultiplier: f32
 
 Textures : map[string]rl.Texture 
+
+FireworkAnim :: struct { 
+    delay: f32,
+    frames: i32,
+}
+fireworkAnim: FireworkAnim = {
+    delay = 0.1,
+    frames = 8,
+}
+
+Firework :: struct { 
+    timeAcc: f32,
+    currentFrame: i32,
+    used: bool,
+    texture: rl.Texture,
+}
+fireworks: [4]Firework
+
 font, fontBold : rl.Font
 
 main :: proc() {
@@ -123,6 +141,13 @@ initGame :: proc() {
         else do fmt.println("Could not create", SCORE_FILE, "file")
     }
     else do highScore = strconv.atoi(string(data))
+
+    for firework, it in &fireworks {
+        using firework
+        used = false
+        currentFrame = 0 - i32(it)
+    }
+
 }
 
 scoreToFile :: proc() {
@@ -144,17 +169,25 @@ loadAssets :: proc() {
     font = rl.LoadFont("./fonts/8bitOperatorPlus-Regular.ttf")
     fontBold = rl.LoadFont("./fonts/8bitOperatorPlus-Bold.ttf")
     appleImg := rl.LoadImage("./textures/apple.png")
+    defer rl.UnloadImage(appleImg)
     rl.ImageResize(&appleImg, i32(f32(cellSize) * 0.6), i32(f32(cellSize) * 0.6))
     Textures["apple"] = rl.LoadTextureFromImage(appleImg)
+
     mangoImg := rl.LoadImage("./textures/mango.png")
+    defer rl.UnloadImage(mangoImg)
     rl.ImageResize(&mangoImg, i32(f32(cellSize) * 0.8), i32(f32(cellSize) * 0.8))
     Textures["mango"] = rl.LoadTextureFromImage(mangoImg)
+
     crateImg := rl.LoadImage("./textures/crate.png")
+    defer rl.UnloadImage(crateImg)
     rl.ImageResize(&crateImg, cellSize, cellSize)
     Textures["crate"] = rl.LoadTextureFromImage(crateImg)
+
     steelCrateImg := rl.LoadImage("./textures/steel-crate.png")
+    defer rl.UnloadImage(steelCrateImg)
     rl.ImageResize(&steelCrateImg, cellSize, cellSize)
     Textures["steelCrate"] = rl.LoadTextureFromImage(steelCrateImg)
+
     snakebodyImg := rl.LoadImage("./textures/snake-body.png")
     rl.ImageResize(&snakebodyImg, cellSize, cellSize)
     Textures["snakebody"] = rl.LoadTextureFromImage(snakebodyImg)
@@ -167,9 +200,23 @@ loadAssets :: proc() {
     snakebendImg := rl.LoadImage("./textures/snake-bend.png")
     rl.ImageResize(&snakebendImg, cellSize, cellSize)
     Textures["snakebend"] = rl.LoadTextureFromImage(snakebendImg)
+
     grassTileImg := rl.LoadImage("./textures/grass-tile.png")
+    defer rl.UnloadImage(grassTileImg)
     rl.ImageResize(&grassTileImg, cellSize*(grassTileImg.width/grassTileImg.height), cellSize)
     Textures["grassTiles"] = rl.LoadTextureFromImage(grassTileImg)
+
+    fireworkAnimImg := rl.LoadImage("./textures/firework.png")
+    defer rl.UnloadImage(fireworkAnimImg)
+    for firework, it in &fireworks {
+        if it <= 1 {
+            rl.ImageResize(&fireworkAnimImg, cellSize * 10 * fireworkAnim.frames, cellSize * 10)
+        }
+        else if it >= 2 {
+            rl.ImageResize(&fireworkAnimImg, cellSize * 5 * fireworkAnim.frames, cellSize * 5)
+        }
+        firework.texture = rl.LoadTextureFromImage(fireworkAnimImg)
+    }
 }
 
 
@@ -530,8 +577,63 @@ draw :: proc() {
         rl.DrawRectangle(gridPos.x, gridPos.y, gridSize.x, gridSize.y, getColor(Colors["grey"], 200))
     }
     if gameState == .Paused do drawInfoCrate("Paused", "Press 'P' to continue")
+
     else if gameState == .Death do drawInfoCrate("GameOver!", "Press 'Enter' to play again or 'Q' to quit")
-    else if gameState == .Highscore do drawInfoCrate("New Highscore!", "Press 'Enter' to play again or 'Q' to quit")
+    else if gameState == .Highscore {
+        drawInfoCrate("New Highscore!", "Press 'Enter' to play again or 'Q' to quit")
+        fireworkTexture := Textures["fireworkAnim"]
+        for firework, it in &fireworks {
+            using firework
+            if !used {
+                if timeAcc >= fireworkAnim.delay {
+                    currentFrame += 1
+                    timeAcc -= fireworkAnim.delay
+                }
+                if currentFrame >= 0 {
+                    pos : rl.Vector2
+                    if it == 0 {
+                        pos = {
+                           f32(gridPos.x),
+                           f32(gridPos.y),
+                        }
+                    }
+                    if it == 1 {
+                        pos = {
+                           f32(gridPos.x + gridSize.x - texture.width / fireworkAnim.frames),
+                           f32(gridPos.y),
+                        }
+                    }
+                    if it == 2 {
+                        pos = {
+                           f32(gridPos.x + cellSize * 5),
+                           f32(gridPos.y),
+                        }
+                    }
+                    if it == 3 {
+                        pos = {
+                           f32(gridPos.x + cellSize * 10),
+                           f32(gridPos.y + cellSize * 3),
+                        }
+                    }
+                    rl.DrawTextureRec(
+                        texture,
+                        rl.Rectangle {
+                            f32(texture.width / fireworkAnim.frames * currentFrame), 
+                            0, 
+                            f32(texture.width / fireworkAnim.frames),
+                            f32(texture.height),
+                        },
+                        pos,
+                        rl.WHITE
+                    )
+
+                }
+                timeAcc += rl.GetFrameTime()
+                if currentFrame == fireworkAnim.frames - 1 do used = true
+            }
+
+        }
+   }
 }
 
 drawInfoCrate :: proc(header: string, text: string) {
