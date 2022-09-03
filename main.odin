@@ -35,12 +35,11 @@ Fruit :: struct {
     timer: i32,
     opacity: u8,
 }
-FruitsTypes :: enum {Apple, Mango, SteelBox, Box}
+FruitsTypes :: enum {Apple, Mango, SteelCrate, Crate}
 
 
 Colors := map[string]u32{
     "windowbg"   = 0x1F1F28,
-    /* "windowbg"   = 0x2A2A37, */
     "gridbg"     = 0x2A2A37,
     "gridlines"  = 0xDCD7BA,
     "gridborder" = 0xC8C093,
@@ -131,7 +130,6 @@ scoreToFile :: proc() {
     defer os.close(scoreFile)
     buf :[8]byte={}
     str := strconv.itoa(buf[:], score)
-    /* str := transmute(string)highScore */
     if errno != 0 {
         fmt.println("Could not open file :", SCORE_FILE)
     } else {
@@ -151,9 +149,12 @@ loadAssets :: proc() {
     mangoImg := rl.LoadImage("./textures/mango.png")
     rl.ImageResize(&mangoImg, i32(f32(cellSize) * 0.8), i32(f32(cellSize) * 0.8))
     Textures["mango"] = rl.LoadTextureFromImage(mangoImg)
-    boxImg := rl.LoadImage("./textures/box.png")
-    rl.ImageResize(&boxImg, i32(f32(cellSize) * 1.1), i32(f32(cellSize) * 1.1))
-    Textures["box"] = rl.LoadTextureFromImage(boxImg)
+    crateImg := rl.LoadImage("./textures/crate.png")
+    rl.ImageResize(&crateImg, cellSize, cellSize)
+    Textures["crate"] = rl.LoadTextureFromImage(crateImg)
+    steelCrateImg := rl.LoadImage("./textures/steel-crate.png")
+    rl.ImageResize(&steelCrateImg, cellSize, cellSize)
+    Textures["steelCrate"] = rl.LoadTextureFromImage(steelCrateImg)
     snakebodyImg := rl.LoadImage("./textures/snake-body.png")
     rl.ImageResize(&snakebodyImg, cellSize, cellSize)
     Textures["snakebody"] = rl.LoadTextureFromImage(snakebodyImg)
@@ -167,7 +168,7 @@ loadAssets :: proc() {
     rl.ImageResize(&snakebendImg, cellSize, cellSize)
     Textures["snakebend"] = rl.LoadTextureFromImage(snakebendImg)
     grassTileImg := rl.LoadImage("./textures/grass-tile.png")
-    rl.ImageResize(&grassTileImg, cellSize*4, cellSize)
+    rl.ImageResize(&grassTileImg, cellSize*(grassTileImg.width/grassTileImg.height), cellSize)
     Textures["grassTiles"] = rl.LoadTextureFromImage(grassTileImg)
 }
 
@@ -248,11 +249,11 @@ updateGame :: proc() {
 
     /* Handle Fruit */
     for fruit, it in &fruits {
-        if fruit.type != .Apple && fruit.type != .SteelBox {
+        if fruit.type != .Apple && fruit.type != .SteelCrate {
             if snake.moved do fruit.timer -= 1
             if fruit.timer == 0 { 
-                if fruit.type == .Box {
-                    fruit.type = .SteelBox
+                if fruit.type == .Crate {
+                    fruit.type = .SteelCrate
                     fruit.opacity = 255
                 }
                 else do unordered_remove(&fruits, it)
@@ -262,25 +263,25 @@ updateGame :: proc() {
             } 
         }
         if snake.body[0] == fruit.pos {
-            if fruit.type != .Box do snake.eaten = true
+            if fruit.type != .Crate do snake.eaten = true
             if fruit.type == .Apple {
                 score += int(math.round(1.0 * scoreMultiplier))
             } else if fruit.type == .Mango {
                 score += int(math.round(3.0 * scoreMultiplier))
-            } else if fruit.type == .Box do openBox()
+            } else if fruit.type == .Crate do openCrate()
             unordered_remove(&fruits, it)
         } 
     }
     eatable := 0
     for fruit in fruits {
-        if fruit.type != .Box && fruit.type != .SteelBox do eatable += 1 
+        if fruit.type != .SteelCrate do eatable += 1 
     }
     if eatable == 0 {
         randNum := getRandNum(1,10) 
         fruit : Fruit
         if randNum <= 6 do fruit = getFruit(.Apple)
         else if randNum <= 8  do fruit = getFruit(.Mango)
-        else do fruit = getFruit(.Box)
+        else do fruit = getFruit(.Crate)
         append(&fruits, fruit)
     }
     snake.moved = false
@@ -292,13 +293,13 @@ isOccupied :: proc(pos: [2]i32) -> CellState {
         if pos == part do return .Obstructed
     }
     for fruit in fruits {
-        if pos == fruit.pos && fruit.type == .SteelBox do return .Obstructed
+        if pos == fruit.pos && fruit.type == .SteelCrate do return .Obstructed
         else if pos == fruit.pos do return .Fruit
     } 
     return .Empty
 }
 
-openBox :: proc () {
+openCrate :: proc () {
     foodSpawned:=false
     for i in 0..=5 {
         if getRandNum(0,3) == 0 {
@@ -418,13 +419,15 @@ drawSnake :: proc() {
 draw :: proc() {
     rl.ClearBackground(getColor(Colors["windowbg"]))
     grassRng := rand.create(0)
+    grassTiles := Textures["grassTiles"]
+    grassTilesNum := int(grassTiles.width / grassTiles.height)
     for x in 0..<CELL_COLUMNS {
         for y in 0..<CELL_ROWS {
-            rnum := getRandNum(1,5)
+            rnum := getRandNum(1, grassTilesNum)
             rl.DrawTextureRec(
-                Textures["grassTiles"],
+                grassTiles,
                 rl.Rectangle {
-                   f32(int(cellSize) * int(rand.float32_range(1,5,&grassRng))),
+                   f32(int(cellSize) * int(rand.float32_range(1, f32(grassTilesNum), &grassRng))),
                    0,
                    f32(cellSize),
                    f32(cellSize),
@@ -437,38 +440,6 @@ draw :: proc() {
             )
         }
     }
-
-    /* Draw Play Field */
-    /* outerRec := rl.Rectangle { */
-    /*     f32(gridPos.x), f32(gridPos.y), */
-    /*     f32(gridSize.x), f32(gridSize.y), */
-    /* } */
-
-    /* gridbg := getColor(Colors["gridbg"], 255) */
-    /* /* rl.DrawRectangleRec( outerRec, gridbg) */ */
-    /* inLineC := getColor(Colors["gridlines"], 255) */
-    /* rl.DrawRectangleLinesEx(outerRec, 1, inLineC) */
-    /* outLineC := getColor(Colors["gridborder"], 50) */
-    /* outLineC := rl.BLACK */
-    /* for i in 1..<CELL_COLUMNS { */
-    /*     i := i32(i) */
-    /*     rl.DrawLine( */
-    /*         gridPos.x + i32(i) * cellSize, */
-    /*         gridPos.y, */
-    /*         gridPos.x + i32(i) * cellSize, */
-    /*         gridPos.y + gridSize.y, */
-    /*         outLineC, */
-    /*     )  */
-    /* } */
-    /* for i in 1..<CELL_ROWS { */
-    /*    rl.DrawLine( */
-    /*         gridPos.x, */
-    /*         gridPos.y + i32(i) * cellSize, */
-    /*         gridPos.x + gridSize.x, */
-    /*         gridPos.y + i32(i) * cellSize, */
-    /*         outLineC */
-    /*    )  */
-    /* } */
     drawSnake()
     c :rl.Color 
     /* Draw Fruit */
@@ -477,31 +448,35 @@ draw :: proc() {
         size: rl.Vector2
         if f.type == .Apple {
             c = getColor(Colors["white"], f.opacity)
+            apple := Textures["apple"]
             rl.DrawTexture(
-                Textures["apple"],
-                vec2.x + cellSize/2 - Textures["apple"].width/2,
-                vec2.y + cellSize/2 - Textures["apple"].width/2,
+                apple,
+                vec2.x + cellSize/2 - apple.width/2,
+                vec2.y + cellSize/2 - apple.width/2,
                 c)
         } else if f.type == .Mango {
             c = getColor(Colors["white"], f.opacity)
+            mango := Textures["mango"]
             rl.DrawTexture(
-                Textures["mango"],
-                vec2.x + cellSize/2 - Textures["mango"].width/2,
-                vec2.y + cellSize/2 - Textures["mango"].width/2,
+                mango,
+                vec2.x + cellSize/2 - mango.width/2,
+                vec2.y + cellSize/2 - mango.width/2,
                 c)
-        }  else if f.type == .SteelBox {
-            c = getColor(Colors["grey"], f.opacity)
-            rl.DrawTexture(
-                Textures["box"],
-                vec2.x + cellSize/2 - Textures["box"].width/2,
-                vec2.y + cellSize/2 - Textures["box"].width/2,
-                c)
-        } else if f.type == .Box {
+        }  else if f.type == .SteelCrate {
             c = getColor(Colors["white"], f.opacity)
+            steelCrate := Textures["steelCrate"]
             rl.DrawTexture(
-                Textures["box"],
-                vec2.x + cellSize/2 - Textures["box"].width/2,
-                vec2.y + cellSize/2 - Textures["box"].width/2,
+                steelCrate,
+                vec2.x + cellSize/2 - steelCrate.width/2,
+                vec2.y + cellSize/2 - steelCrate.width/2,
+                c)
+        } else if f.type == .Crate {
+            c = getColor(Colors["white"], f.opacity)
+            crate := Textures["crate"]
+            rl.DrawTexture(
+                crate,
+                vec2.x + cellSize/2 - crate.width/2,
+                vec2.y + cellSize/2 - crate.width/2,
                 c)
         }
     }
@@ -551,12 +526,15 @@ draw :: proc() {
         f32(gridPos.y) - textSizeVec2.y - 10,
     }
     rl.DrawTextEx(font, text, vec2, fontSize, spacing ,c)
-    if gameState == .Paused do drawInfoBox("Paused", "Press 'P' to continue")
-    if gameState == .Death do drawInfoBox("GameOver!", "Press 'Enter' to play again or 'Q' to quit")
-    if gameState == .Highscore do drawInfoBox("New Highscore!", "Press 'Enter' to play again or 'Q' to quit")
+    if gameState != .Running {
+        rl.DrawRectangle(gridPos.x, gridPos.y, gridSize.x, gridSize.y, getColor(Colors["grey"], 200))
+    }
+    if gameState == .Paused do drawInfoCrate("Paused", "Press 'P' to continue")
+    else if gameState == .Death do drawInfoCrate("GameOver!", "Press 'Enter' to play again or 'Q' to quit")
+    else if gameState == .Highscore do drawInfoCrate("New Highscore!", "Press 'Enter' to play again or 'Q' to quit")
 }
 
-drawInfoBox :: proc(header: string, text: string) {
+drawInfoCrate :: proc(header: string, text: string) {
     h := strings.clone_to_cstring(header)
     hFontSize := f32(fontBold.baseSize) * 1.5
     headerSize:= rl.MeasureTextEx(fontBold, h, hFontSize, 0)
