@@ -9,7 +9,7 @@ import "core:os"
 import rl "vendor:raylib"
 import rand "core:math/rand"
 
-FPS :: 60
+FPS :: 120
 GAME_SPEED :: 10
 /* W_WIDTH, W_HEIGHT :: 800, 600 */
 W_WIDTH, W_HEIGHT :: 1280, 1024
@@ -20,6 +20,8 @@ SCORE_FILE :: "highscore"
 
 GameState :: enum {Running, Paused, Death, Highscore, Quit}
 CellState :: enum {Empty, Fruit, Obstructed}
+Direction :: enum {Right, Down, Left, Up}
+FruitTypes :: enum {Apple, Mango, SteelCrate, Crate}
 
 Snake :: struct {
     body: [dynamic][2]i32,
@@ -27,32 +29,19 @@ Snake :: struct {
     eaten: bool,
     moved: bool,
 }
-Direction :: enum{Right, Down, Left, Up}
 
 Fruit :: struct {
     pos: [2]i32,
-    type: FruitsTypes,
+    type: FruitTypes,
     timer: i32,
     opacity: u8,
 }
-FruitsTypes :: enum {Apple, Mango, SteelCrate, Crate}
-
 
 Colors := map[string]u32{
     "windowbg"   = 0x1F1F28,
-    "gridbg"     = 0x2A2A37,
-    "gridlines"  = 0xDCD7BA,
-    "gridborder" = 0xC8C093,
-    "infobg"     = 0xC8C093,
     "text"       = 0xDCD7BA,
-    "snake"      = 0x7E9CD8,
     "snakedead"  = 0xE82424,
     "white"      = 0xFFFFFF,
-    "grey"       = 0x2c3030,
-}
-
-Rgb :: struct {
-    r, g, b, a, : u8
 }
 
 cellSize: i32
@@ -69,11 +58,15 @@ moveSpeed: f32
 scoreMultiplier: f32
 
 Textures : map[string]rl.Texture 
+font, fontBold : rl.Font
+music : rl.Music
+Sounds : map[string] rl.Sound
 
 FireworkAnim :: struct { 
     delay: f32,
     frames: i32,
 }
+
 fireworkAnim: FireworkAnim = {
     delay = 0.1,
     frames = 8,
@@ -85,13 +78,14 @@ Firework :: struct {
     used: bool,
     texture: rl.Texture,
 }
-fireworks: [4]Firework
 
-font, fontBold : rl.Font
+fireworks: [4]Firework
 
 main :: proc() {
     rl.InitWindow(W_WIDTH, W_HEIGHT, "Snake!")
     defer rl.CloseWindow()
+    rl.InitAudioDevice()
+    defer rl.CloseAudioDevice()
     rl.SetTargetFPS(FPS)
 
     initGame()
@@ -99,12 +93,15 @@ main :: proc() {
     for gameState != .Quit {
         rl.BeginDrawing()
         defer rl.EndDrawing()
-        updateGame()
+        updateGame(music)
         draw()
+        rl.DrawFPS(0,0)
     }
 }
 
 initGame :: proc() {
+    rl.PlayMusicStream(music)
+    rl.SetMusicVolume(music, 0.05)
     gameState = .Running
     /* Init Grid */
     size := math.round(f32(W_WIDTH) * 0.8 / f32(CELL_COLUMNS))
@@ -145,9 +142,8 @@ initGame :: proc() {
     for firework, it in &fireworks {
         using firework
         used = false
-        currentFrame = 0 - i32(it)
+        currentFrame = -5 - i32(it)
     }
-
 }
 
 scoreToFile :: proc() {
@@ -166,8 +162,11 @@ scoreToFile :: proc() {
 }
 
 loadAssets :: proc() {
+    /* Fonts */
     font = rl.LoadFont("./fonts/8bitOperatorPlus-Regular.ttf")
     fontBold = rl.LoadFont("./fonts/8bitOperatorPlus-Bold.ttf")
+
+    /* Textures */
     appleImg := rl.LoadImage("./textures/apple.png")
     defer rl.UnloadImage(appleImg)
     rl.ImageResize(&appleImg, i32(f32(cellSize) * 0.6), i32(f32(cellSize) * 0.6))
@@ -217,10 +216,22 @@ loadAssets :: proc() {
         }
         firework.texture = rl.LoadTextureFromImage(fireworkAnimImg)
     }
+
+    /* Music */
+    music = rl.LoadMusicStream("./audio/Spooky-Island.mp3")
+    music.looping = true
+    rl.PlayMusicStream(music)
+    rl.SetMusicVolume(music, 0.05)
+
+    /* Sounds */
+    Sounds["eating"] = rl.LoadSound("./audio/eating.wav")
+    Sounds["collision"] = rl.LoadSound("./audio/collision.wav")
+    Sounds["breakcrate"] = rl.LoadSound("./audio/breakcrate.wav")
 }
 
 
-updateGame :: proc() {
+updateGame :: proc(music : rl.Music) {
+    rl.UpdateMusicStream(music)
     /* Get Input */
     if gameState == .Death || gameState == .Highscore {
         if rl.IsKeyPressed(.ENTER) do initGame()
@@ -284,8 +295,12 @@ updateGame :: proc() {
             snake.body[i] = snake.body[i-1]
         }
         if isOccupied(nextPos) == .Obstructed {
+            rl.PlaySound(Sounds["eating"])
+            rl.PlaySound(Sounds["collision"])
             if score > highScore && highScore != 0 do gameState = .Highscore 
-            else do gameState = .Death 
+            else {
+                gameState = .Death
+            } 
             snake.body[0] = nextPos
             return
         } 
@@ -313,9 +328,14 @@ updateGame :: proc() {
             if fruit.type != .Crate do snake.eaten = true
             if fruit.type == .Apple {
                 score += int(math.round(1.0 * scoreMultiplier))
+                rl.PlaySound(Sounds["eating"])
             } else if fruit.type == .Mango {
                 score += int(math.round(3.0 * scoreMultiplier))
-            } else if fruit.type == .Crate do openCrate()
+                rl.PlaySound(Sounds["eating"])
+            } else if fruit.type == .Crate {
+                openCrate()
+                rl.PlaySound(Sounds["breakcrate"])
+            }
             unordered_remove(&fruits, it)
         } 
     }
@@ -363,7 +383,7 @@ getRandNum :: proc(low: int, high: int) -> i32 {
     return i32(rand.float32_range(f32(low), f32(high), &rng))
 }
 
-getFruit :: proc(type: FruitsTypes) -> Fruit {
+getFruit :: proc(type: FruitTypes) -> Fruit {
     for {
         pos :[2]i32= {
             getRandNum(0, CELL_COLUMNS),
