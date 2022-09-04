@@ -18,9 +18,9 @@ CELLS :: CELL_COLUMNS * CELL_ROWS
 FOOD_TIMER :: i32(CELLS * .2)
 SCORE_FILE :: "highscore"
 
-GameState :: enum {Running, Paused, Death, Highscore, Quit}
-CellState :: enum {Empty, Fruit, Obstructed}
-Direction :: enum {Right, Down, Left, Up}
+GameState  :: enum {Running, Paused, Death, Highscore, Quit}
+CellState  :: enum {Empty, Fruit, Obstructed}
+Direction  :: enum {Right, Down, Left, Up}
 FruitTypes :: enum {Apple, Mango, SteelCrate, Crate}
 
 Snake :: struct {
@@ -100,10 +100,10 @@ main :: proc() {
 }
 
 initGame :: proc() {
+    gameState = .Running
     rl.PlayMusicStream(music)
     rl.SetMusicVolume(music, 0.05)
-    gameState = .Running
-    /* Init Grid */
+
     size := math.round(f32(W_WIDTH) * 0.8 / f32(CELL_COLUMNS))
     cellSize = i32(size)
     gridSize.x  = cellSize * CELL_COLUMNS
@@ -187,18 +187,10 @@ loadAssets :: proc() {
     rl.ImageResize(&steelCrateImg, cellSize, cellSize)
     Textures["steelCrate"] = rl.LoadTextureFromImage(steelCrateImg)
 
-    snakebodyImg := rl.LoadImage("./textures/snake-body.png")
-    rl.ImageResize(&snakebodyImg, cellSize, cellSize)
-    Textures["snakebody"] = rl.LoadTextureFromImage(snakebodyImg)
-    snaketailImg := rl.LoadImage("./textures/snake-tail.png")
-    rl.ImageResize(&snaketailImg, cellSize, cellSize)
-    Textures["snaketail"] = rl.LoadTextureFromImage(snaketailImg)
-    snakeheadImg := rl.LoadImage("./textures/snake-head.png")
-    rl.ImageResize(&snakeheadImg, cellSize, cellSize)
-    Textures["snakehead"] = rl.LoadTextureFromImage(snakeheadImg)
-    snakebendImg := rl.LoadImage("./textures/snake-bend.png")
-    rl.ImageResize(&snakebendImg, cellSize, cellSize)
-    Textures["snakebend"] = rl.LoadTextureFromImage(snakebendImg)
+    snakeImg := rl.LoadImage("./textures/snake.png")
+    defer rl.UnloadImage(snakeImg)
+    rl.ImageResize(&snakeImg, cellSize * 4, cellSize)
+    Textures["snake"] = rl.LoadTextureFromImage(snakeImg)
 
     grassTileImg := rl.LoadImage("./textures/grass-tile.png")
     defer rl.UnloadImage(grassTileImg)
@@ -417,6 +409,38 @@ drawSnake :: proc() {
     } else {
         c = getColor(Colors["white"], 255)
     }
+
+    SnakeSegemnt :: enum {
+        Tail, Body, Head, Bend,
+    }
+
+    drawSegment :: proc(seg: SnakeSegemnt, pos: ^rl.Vector2, rotation: int, color : rl.Color) {
+        snakeTexture := Textures["snake"]
+        origin : rl.Vector2
+        if rotation == 90 do origin = {0, f32(cellSize)}
+        else if rotation == 180 do origin = {f32(cellSize), f32(cellSize)}
+        else if rotation == 270 do origin = {f32(cellSize), 0} 
+        rl.DrawTexturePro(
+            snakeTexture,
+            rl.Rectangle {
+                f32(snakeTexture.height * i32(seg)),
+                0,
+                f32(snakeTexture.height),
+                f32(snakeTexture.height),
+            },
+            rl.Rectangle {
+                pos.x,
+                pos.y,
+                f32(snakeTexture.height),
+                f32(snakeTexture.height),
+            },
+            origin,
+            f32(rotation),
+            color,
+        )
+
+    }
+
     for pos, it in body {
         vec2 : rl.Vector2
         vec2.x = f32(posToPixel(pos).x)
@@ -429,8 +453,7 @@ drawSnake :: proc() {
             else if diff == {0,1} do rotation = 90
             else if diff == {-1,0} do rotation = 180
             else if diff == {0,-1} do rotation = 270
-            adjustForRotation(&vec2, rotation)
-            rl.DrawTextureEx(Textures["snakehead"], vec2, f32(rotation), 1, c)
+            drawSegment(.Head, &vec2, rotation, c)
             continue
         } 
         if it == len(body) - 1 {
@@ -440,8 +463,7 @@ drawSnake :: proc() {
             else if diff == {0,-1} do rotation = 90
             else if diff == {1,0} do rotation = 180
             else if diff == {0,1} do rotation = 270
-            adjustForRotation(&vec2, rotation)
-            rl.DrawTextureEx(Textures["snaketail"], vec2, f32(rotation), 1, c)
+            drawSegment(.Tail, &vec2, rotation, c)
             continue
         } 
         front := normaliseForWrap(body[it], body[it-1])
@@ -452,22 +474,15 @@ drawSnake :: proc() {
             else if diff == {0,2} do rotation = 90
             else if diff == {-2,0} do rotation = 180
             else if diff == {0,-2} do rotation = 270
-            adjustForRotation(&vec2, rotation)
-            rl.DrawTextureEx(Textures["snakebody"], vec2, f32(rotation), 1, c)
+            drawSegment(.Body, &vec2, rotation, c)
         } else {
             diff := (body[it] - front) + (body[it] - back)
             if diff == {1,1} do rotation = 0
             else if diff == {-1,1} do rotation = 90
             else if diff == {-1,-1} do rotation = 180
             else if diff == {1,-1} do rotation = 270
-            adjustForRotation(&vec2, rotation)
-            rl.DrawTextureEx(Textures["snakebend"], vec2, f32(rotation), 1, c)
+            drawSegment(.Bend, &vec2, rotation, c)
         }
-    }
-    adjustForRotation :: proc(pos: ^rl.Vector2, rotation: int) {
-        if rotation == 90 do pos.x += f32(cellSize)
-        else if rotation == 180 { pos.x += f32(cellSize); pos.y += f32(cellSize)}
-        else if rotation == 270 do pos.y += f32(cellSize)
     }
 
     normaliseForWrap :: proc(primary: [2]i32, secondary: [2]i32) -> [2]i32 {
@@ -496,12 +511,12 @@ draw :: proc() {
                 rl.Rectangle {
                    f32(int(cellSize) * int(rand.float32_range(1, f32(grassTilesNum), &grassRng))),
                    0,
-                   f32(cellSize),
-                   f32(cellSize),
+                   f32(grassTiles.height),
+                   f32(grassTiles.height),
                 },
                 rl.Vector2{
-                    f32(int(cellSize) * x + int(gridPos.x)),
-                    f32(int(cellSize) * y + int(gridPos.y))
+                    f32(cellSize * i32(x) + gridPos.x),
+                    f32(cellSize * i32(y) + gridPos.y)
                 },
                 rl.WHITE,
             )
