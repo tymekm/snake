@@ -18,10 +18,11 @@ CELLS :: CELL_COLUMNS * CELL_ROWS
 FOOD_TIMER :: i32(CELLS * .2)
 SCORE_FILE :: "highscore"
 
-GameState  :: enum {Running, Paused, Death, Highscore, Quit}
-CellState  :: enum {Empty, Fruit, Obstructed}
-Direction  :: enum {Right, Down, Left, Up}
-FruitTypes :: enum {Apple, Mango, SteelCrate, Crate}
+GameState    :: enum {Running, Paused, Death, Highscore, Quit}
+CellState    :: enum {Empty, Fruit, Obstructed}
+SnakeSegment :: enum {Tail, Body, Head, Bend}
+Direction    :: enum {Right, Down, Left, Up}
+FruitTypes   :: enum {Apple, Mango, SteelCrate, Crate}
 
 Snake :: struct {
     body: [dynamic][2]i32,
@@ -44,32 +45,10 @@ Colors := map[string]u32{
     "white"      = 0xFFFFFF,
 }
 
-cellSize: i32
-gridPos:  [2]i32
-gridSize: [2]i32
-rng : rand.Rand
-score:     int
-highScore: int
-snake:     Snake
-fruits:    [dynamic]Fruit
-timeAcc:   f32
-gameState: GameState
-moveSpeed: f32
-scoreMultiplier: f32
-
-Textures : map[string]rl.Texture 
-font, fontBold : rl.Font
-music : rl.Music
-Sounds : map[string] rl.Sound
-
-FireworkAnim :: struct { 
+FireworksAnim :: struct {
     delay: f32,
     frames: i32,
-}
-
-fireworkAnim: FireworkAnim = {
-    delay = 0.1,
-    frames = 8,
+    fireworks :[4] Firework,
 }
 
 Firework :: struct { 
@@ -79,7 +58,25 @@ Firework :: struct {
     texture: rl.Texture,
 }
 
-fireworks: [4]Firework
+
+cellSize: i32
+gridPos:  [2]i32
+gridSize: [2]i32
+rng : rand.Rand
+score:     int
+highScore: int
+snake:     Snake
+fruits:    [dynamic]Fruit
+fireworksAnim: FireworksAnim
+timeAcc:   f32
+gameState: GameState
+moveSpeed: f32
+scoreMultiplier: f32
+
+Textures : map[string]rl.Texture 
+font, fontBold : rl.Font
+music : rl.Music
+Sounds : map[string] rl.Sound
 
 main :: proc() {
     rl.InitWindow(W_WIDTH, W_HEIGHT, "Snake!")
@@ -139,7 +136,10 @@ initGame :: proc() {
     }
     else do highScore = strconv.atoi(string(data))
 
-    for firework, it in &fireworks {
+
+    fireworksAnim.delay = 0.1
+    fireworksAnim.frames = 8
+    for firework, it in &fireworksAnim.fireworks {
         using firework
         used = false
         currentFrame = -5 - i32(it)
@@ -199,12 +199,12 @@ loadAssets :: proc() {
 
     fireworkAnimImg := rl.LoadImage("./textures/firework.png")
     defer rl.UnloadImage(fireworkAnimImg)
-    for firework, it in &fireworks {
+    for firework, it in &fireworksAnim.fireworks {
         if it <= 1 {
-            rl.ImageResize(&fireworkAnimImg, cellSize * 10 * fireworkAnim.frames, cellSize * 10)
+            rl.ImageResize(&fireworkAnimImg, cellSize * 10 * fireworksAnim.frames, cellSize * 10)
         }
         else if it >= 2 {
-            rl.ImageResize(&fireworkAnimImg, cellSize * 5 * fireworkAnim.frames, cellSize * 5)
+            rl.ImageResize(&fireworkAnimImg, cellSize * 5 * fireworksAnim.frames, cellSize * 5)
         }
         firework.texture = rl.LoadTextureFromImage(fireworkAnimImg)
     }
@@ -410,11 +410,7 @@ drawSnake :: proc() {
         c = getColor(Colors["white"], 255)
     }
 
-    SnakeSegemnt :: enum {
-        Tail, Body, Head, Bend,
-    }
-
-    drawSegment :: proc(seg: SnakeSegemnt, pos: ^rl.Vector2, rotation: int, color : rl.Color) {
+    drawSegment :: proc(seg: SnakeSegment, pos: ^rl.Vector2, rotation: int, color : rl.Color) {
         snakeTexture := Textures["snake"]
         origin : rl.Vector2
         if rotation == 90 do origin = {0, f32(cellSize)}
@@ -617,12 +613,13 @@ draw :: proc() {
     else if gameState == .Highscore {
         drawInfoCrate("New Highscore!", "Press 'Enter' to play again or 'Q' to quit")
         fireworkTexture := Textures["fireworkAnim"]
+        using fireworksAnim
         for firework, it in &fireworks {
             using firework
             if !used {
-                if timeAcc >= fireworkAnim.delay {
+                if timeAcc >= delay {
                     currentFrame += 1
-                    timeAcc -= fireworkAnim.delay
+                    timeAcc -= delay
                 }
                 if currentFrame >= 0 {
                     pos : rl.Vector2
@@ -634,7 +631,7 @@ draw :: proc() {
                     }
                     if it == 1 {
                         pos = {
-                           f32(gridPos.x + gridSize.x - texture.width / fireworkAnim.frames),
+                           f32(gridPos.x + gridSize.x - texture.width / frames),
                            f32(gridPos.y),
                         }
                     }
@@ -653,9 +650,9 @@ draw :: proc() {
                     rl.DrawTextureRec(
                         texture,
                         rl.Rectangle {
-                            f32(texture.width / fireworkAnim.frames * currentFrame), 
+                            f32(texture.width / frames * currentFrame), 
                             0, 
-                            f32(texture.width / fireworkAnim.frames),
+                            f32(texture.width / frames),
                             f32(texture.height),
                         },
                         pos,
@@ -664,7 +661,7 @@ draw :: proc() {
 
                 }
                 timeAcc += rl.GetFrameTime()
-                if currentFrame == fireworkAnim.frames - 1 do used = true
+                if currentFrame == frames - 1 do used = true
             }
 
         }
