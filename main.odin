@@ -99,7 +99,6 @@ main :: proc() {
         defer rl.EndDrawing()
         updateGame()
         draw()
-        rl.DrawFPS(0,0)
     }
 }
 
