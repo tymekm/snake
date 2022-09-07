@@ -88,7 +88,7 @@ main :: proc() {
     rl.InitWindow(W_WIDTH, W_HEIGHT, "Snake!")
     defer rl.CloseWindow()
     rl.InitAudioDevice()
-    rl.SetMasterVolume(0.2)
+    rl.SetMasterVolume(1) // 0 to 1
     defer rl.CloseAudioDevice()
     rl.SetTargetFPS(FPS)
 
@@ -257,10 +257,10 @@ updateGame :: proc() {
     else if gameState != .Running do return
 
     nextDir: Direction
-    if rl.IsKeyPressed(.UP)        || rl.IsKeyPressed(.E) do nextDir = .Up  
-    else if rl.IsKeyPressed(.DOWN) || rl.IsKeyPressed(.D) do nextDir = .Down 
-    else if rl.IsKeyPressed(.RIGHT)|| rl.IsKeyPressed(.F) do nextDir = .Right 
-    else if rl.IsKeyPressed(.LEFT) || rl.IsKeyPressed(.S) do nextDir = .Left 
+    if rl.IsKeyPressed(.UP)        || rl.IsKeyPressed(.W) do nextDir = .Up  
+    else if rl.IsKeyPressed(.DOWN) || rl.IsKeyPressed(.S) do nextDir = .Down 
+    else if rl.IsKeyPressed(.RIGHT)|| rl.IsKeyPressed(.D) do nextDir = .Right 
+    else if rl.IsKeyPressed(.LEFT) || rl.IsKeyPressed(.A) do nextDir = .Left 
     else do nextDir = snake.direction
 
     nextPos :[2]i32
