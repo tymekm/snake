@@ -632,7 +632,6 @@ draw :: proc() {
         rl.DrawRectangle(gridPos.x, gridPos.y, gridSize.x, gridSize.y, getColor(Colors["grey"], 200))
     }
     if gameState == .Paused do drawInfoBox("Paused", "Press 'P' to continue")
-
     else if gameState == .Death do drawInfoBox("GameOver!", "Press 'Enter' to play again or 'Q' to quit")
     else if gameState == .Highscore {
         drawInfoBox("New Highscore!", "Press 'Enter' to play again or 'Q' to quit")
