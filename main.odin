@@ -27,8 +27,9 @@ FruitTypes   :: enum {Apple, Mango, SteelCrate, Crate}
 Snake :: struct {
     body: [dynamic][2]i32,
     direction: Direction,
-    eaten: bool,
-    moved: bool,
+    ate: bool,
+    moveSpeed: f32,
+    velocity: f32,
 }
 
 Fruit :: struct {
@@ -58,6 +59,14 @@ Firework :: struct {
     texture: rl.Texture,
 }
 
+Music :: struct {
+    maxVolume: f32,
+    volume: f32,
+    fadeTime: f32,
+    track: rl.Music,
+    fade : enum {In, Out},
+}
+
 
 cellSize: i32
 gridPos:  [2]i32
@@ -70,12 +79,11 @@ fruits:    [dynamic]Fruit
 fireworksAnim: FireworksAnim
 timeAcc:   f32
 gameState: GameState
-moveSpeed: f32
 scoreMultiplier: f32
 
 Textures : map[string]rl.Texture 
 font, fontBold : rl.Font
-music : rl.Music
+music : Music
 Sounds : map[string] rl.Sound
 
 main :: proc() {
@@ -90,7 +98,7 @@ main :: proc() {
     for gameState != .Quit {
         rl.BeginDrawing()
         defer rl.EndDrawing()
-        updateGame(music)
+        updateGame()
         draw()
         rl.DrawFPS(0,0)
     }
@@ -98,8 +106,11 @@ main :: proc() {
 
 initGame :: proc() {
     gameState = .Running
-    rl.PlayMusicStream(music)
-    rl.SetMusicVolume(music, 0.05)
+    music.maxVolume = 0.1
+    music.volume = 0
+    music.fadeTime = 2
+    rl.SetMusicVolume(music.track, music.volume)
+    rl.PlayMusicStream(music.track)
 
     size := math.round(f32(W_WIDTH) * 0.8 / f32(CELL_COLUMNS))
     cellSize = i32(size)
@@ -109,9 +120,8 @@ initGame :: proc() {
     gridPos.y   = (W_HEIGHT  - gridSize.y) / 2
 
     rng = rand.create(u64(time.to_unix_nanoseconds(time.now())))
-    if score > highScore do scoreToFile()
     score = 0
-    moveSpeed = 1 / f32(GAME_SPEED)
+    snake.moveSpeed = 1 / f32(GAME_SPEED)
     scoreMultiplier = math.pow(f32(GAME_SPEED), 1.5)
     snake.body = {}
     snake.direction = Direction.Right
@@ -143,21 +153,6 @@ initGame :: proc() {
         using firework
         used = false
         currentFrame = -5 - i32(it)
-    }
-}
-
-scoreToFile :: proc() {
-    scoreFile, errno := os.open(SCORE_FILE, os.O_WRONLY)
-    defer os.close(scoreFile)
-    buf :[8]byte={}
-    str := strconv.itoa(buf[:], score)
-    if errno != 0 {
-        fmt.println("Could not open file :", SCORE_FILE)
-    } else {
-        _, errno := os.write_string(scoreFile, str)
-        if errno != 0 {
-            fmt.println("Could not write to file:", SCORE_FILE, "\nErrno:", errno)
-        } 
     }
 }
 
@@ -210,37 +205,60 @@ loadAssets :: proc() {
     }
 
     /* Music */
-    music = rl.LoadMusicStream("./audio/Spooky-Island.mp3")
-    music.looping = true
-    rl.PlayMusicStream(music)
-    rl.SetMusicVolume(music, 0.05)
+    music.track = rl.LoadMusicStream("./audio/Spooky-Island.mp3")
+    music.track.looping = true
+    rl.PlayMusicStream(music.track)
 
     /* Sounds */
     Sounds["eating"] = rl.LoadSound("./audio/eating.wav")
     Sounds["collision"] = rl.LoadSound("./audio/collision.wav")
     Sounds["breakcrate"] = rl.LoadSound("./audio/breakcrate.wav")
+    Sounds["highscore"] = rl.LoadSound("./audio/highscore.wav")
 }
 
+scoreToFile :: proc() {
+    scoreFile, errno := os.open(SCORE_FILE, os.O_WRONLY)
+    defer os.close(scoreFile)
+    buf :[8]byte={}
+    str := strconv.itoa(buf[:], score)
+    if errno != 0 {
+        fmt.println("Could not open file :", SCORE_FILE)
+    } else {
+        _, errno := os.write_string(scoreFile, str)
+        if errno != 0 {
+            fmt.println("Could not write to file:", SCORE_FILE, "\nErrno:", errno)
+        } 
+    }
+}
 
-updateGame :: proc(music : rl.Music) {
-    rl.UpdateMusicStream(music)
+updateGame :: proc() {
+    if gameState == .Running && music.volume <= music.maxVolume {
+        music.volume += (rl.GetFrameTime() / music.fadeTime) * music.maxVolume
+    } else if gameState == .Highscore {
+        music.volume = 0
+        rl.SeekMusicStream(music.track, 0)
+    } else if gameState != .Running && music.volume >= 0 {
+        music.volume -= (rl.GetFrameTime() / music.fadeTime) * music.maxVolume
+    }
+    rl.SetMusicVolume(music.track, music.volume)
+    rl.UpdateMusicStream(music.track)
+
     /* Get Input */
     if gameState == .Death || gameState == .Highscore {
-        if rl.IsKeyPressed(.ENTER) do initGame()
-        if rl.IsKeyPressed(.Q) do gameState = .Quit
+        if rl.IsKeyPressed(.ENTER)  do initGame()
+        else if rl.IsKeyPressed(.Q) do gameState = .Quit
         return
     } else if gameState == .Paused {
         if rl.IsKeyPressed(.P) do gameState = .Running
         if rl.IsKeyPressed(.Q) do gameState = .Quit
         return
     }
-    if rl.IsKeyPressed(.P) do gameState = .Paused
-    if rl.IsKeyPressed(.ESCAPE)|| rl.IsKeyPressed(.Q) do gameState = .Quit
-
-    if gameState != .Running {return}
+    else if rl.IsKeyPressed(.P) do gameState = .Paused
+    else if rl.IsKeyPressed(.ESCAPE)|| rl.IsKeyPressed(.Q) do gameState = .Quit
+    else if gameState != .Running do return
 
     nextDir: Direction
-    if rl.IsKeyPressed(.UP) || rl.IsKeyPressed(.E) do nextDir = .Up  
+    if rl.IsKeyPressed(.UP)        || rl.IsKeyPressed(.E) do nextDir = .Up  
     else if rl.IsKeyPressed(.DOWN) || rl.IsKeyPressed(.D) do nextDir = .Down 
     else if rl.IsKeyPressed(.RIGHT)|| rl.IsKeyPressed(.F) do nextDir = .Right 
     else if rl.IsKeyPressed(.LEFT) || rl.IsKeyPressed(.S) do nextDir = .Left 
@@ -277,11 +295,12 @@ updateGame :: proc(music : rl.Music) {
     if nextPos == snake.body[1] do return
     snake.direction = nextDir
 
-    if timeAcc >= moveSpeed {
+    moved := false
+    if timeAcc >= snake.moveSpeed {
         lastI := len(snake.body) - 1
-        if snake.eaten == true {
+        if snake.ate == true {
             append(&snake.body, snake.body[lastI])
-            snake.eaten = false
+            snake.ate = false
         }
         for i := lastI; i > 0; i-=1 {
             snake.body[i] = snake.body[i-1]
@@ -289,22 +308,29 @@ updateGame :: proc(music : rl.Music) {
         if isOccupied(nextPos) == .Obstructed {
             rl.PlaySound(Sounds["eating"])
             rl.PlaySound(Sounds["collision"])
-            if score > highScore && highScore != 0 do gameState = .Highscore 
-            else {
+            if score > highScore {
+                if highScore == 0 {
+                    gameState = .Death
+                } else {
+                    gameState = .Highscore
+                    rl.PlaySound(Sounds["highscore"])
+                }
+                scoreToFile()
+            } else {
                 gameState = .Death
             } 
             snake.body[0] = nextPos
             return
         } 
         snake.body[0] = nextPos
-        timeAcc -= moveSpeed
-        snake.moved = true
+        timeAcc -= snake.moveSpeed
+        moved = true
     }
 
     /* Handle Fruit */
     for fruit, it in &fruits {
         if fruit.type != .Apple && fruit.type != .SteelCrate {
-            if snake.moved do fruit.timer -= 1
+            if moved do fruit.timer -= 1
             if fruit.timer == 0 { 
                 if fruit.type == .Crate {
                     fruit.type = .SteelCrate
@@ -317,7 +343,7 @@ updateGame :: proc(music : rl.Music) {
             } 
         }
         if snake.body[0] == fruit.pos {
-            if fruit.type != .Crate do snake.eaten = true
+            if fruit.type != .Crate do snake.ate = true
             if fruit.type == .Apple {
                 score += int(math.round(1.0 * scoreMultiplier))
                 rl.PlaySound(Sounds["eating"])
@@ -343,7 +369,6 @@ updateGame :: proc(music : rl.Music) {
         else do fruit = getFruit(.Crate)
         append(&fruits, fruit)
     }
-    snake.moved = false
     timeAcc += rl.GetFrameTime()
 }
 
@@ -607,11 +632,11 @@ draw :: proc() {
     if gameState != .Running {
         rl.DrawRectangle(gridPos.x, gridPos.y, gridSize.x, gridSize.y, getColor(Colors["grey"], 200))
     }
-    if gameState == .Paused do drawInfoCrate("Paused", "Press 'P' to continue")
+    if gameState == .Paused do drawInfoBox("Paused", "Press 'P' to continue")
 
-    else if gameState == .Death do drawInfoCrate("GameOver!", "Press 'Enter' to play again or 'Q' to quit")
+    else if gameState == .Death do drawInfoBox("GameOver!", "Press 'Enter' to play again or 'Q' to quit")
     else if gameState == .Highscore {
-        drawInfoCrate("New Highscore!", "Press 'Enter' to play again or 'Q' to quit")
+        drawInfoBox("New Highscore!", "Press 'Enter' to play again or 'Q' to quit")
         fireworkTexture := Textures["fireworkAnim"]
         using fireworksAnim
         for firework, it in &fireworks {
@@ -668,7 +693,7 @@ draw :: proc() {
    }
 }
 
-drawInfoCrate :: proc(header: string, text: string) {
+drawInfoBox :: proc(header: string, text: string) {
     h := strings.clone_to_cstring(header)
     hFontSize := f32(fontBold.baseSize) * 1.5
     headerSize:= rl.MeasureTextEx(fontBold, h, hFontSize, 0)
@@ -691,15 +716,41 @@ drawInfoCrate :: proc(header: string, text: string) {
     textWidth: f32
     if headerSize.x > textSize.x do textWidth = headerSize.x
     else do textWidth = textSize.x
-    ibPadding :i32= 20
-    ibW: i32 = i32(textWidth) + ibPadding
-    ibH: i32 = i32(textSize.y + headerSize.y + textPadding) + ibPadding
-    ibX: i32 = W_WIDTH/2 - ibW/2
-    ibY: i32 = W_HEIGHT/2 - ibH/2
-
-    rl.DrawRectangle(ibX, ibY, ibW, ibH, c)
+    infoBoxWidth  := textWidth + 20
+    infoBoxHeight := textSize.y + headerSize.y + textPadding + 20
+    infoBoxVec2 : rl.Vector2 = {
+        W_WIDTH/2 - infoBoxWidth/2,
+        W_HEIGHT/2 - infoBoxHeight/2,
+    }
+    rl.DrawRectangleRec(
+         rl.Rectangle {
+             infoBoxVec2.x,
+             infoBoxVec2.y,
+             infoBoxWidth,
+             infoBoxHeight,
+        },
+        c,
+    )
 
     c = getColor(Colors["text"])
     rl.DrawTextEx(fontBold, h, headerPos, hFontSize, 0, c)
     rl.DrawTextEx(font, t, textPos, tFontSize, 0, c)
+
+    if gameState == .Highscore {
+        c = rl.GOLD
+        buf := [8]byte {}
+        s := strings.clone_to_cstring(strconv.itoa(buf[:], score))
+        sFontSize := f32(fontBold.baseSize * 3)
+        scoreSize := rl.MeasureTextEx(
+            fontBold,
+            s,
+            sFontSize,
+            0,
+        )
+        sPos: rl.Vector2 = {
+            f32(gridPos.x + (gridSize.x/2)) - (scoreSize.x / 2),
+            infoBoxVec2.y - (scoreSize.y * 2),
+        }
+        rl.DrawTextEx(fontBold, s, sPos, sFontSize, 0, c)
+    }
 }
