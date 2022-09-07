@@ -10,8 +10,7 @@ import rl "vendor:raylib"
 import rand "core:math/rand"
 
 FPS :: 120
-GAME_SPEED :: 10
-/* W_WIDTH, W_HEIGHT :: 800, 600 */
+GAME_SPEED :: 8
 W_WIDTH, W_HEIGHT :: 1280, 1024
 CELL_COLUMNS, CELL_ROWS :: 20, 15
 CELLS :: CELL_COLUMNS * CELL_ROWS
@@ -67,7 +66,6 @@ Music :: struct {
     fade : enum {In, Out},
 }
 
-
 cellSize: i32
 gridPos:  [2]i32
 gridSize: [2]i32
@@ -90,6 +88,7 @@ main :: proc() {
     rl.InitWindow(W_WIDTH, W_HEIGHT, "Snake!")
     defer rl.CloseWindow()
     rl.InitAudioDevice()
+    rl.SetMasterVolume(0.2)
     defer rl.CloseAudioDevice()
     rl.SetTargetFPS(FPS)
 
